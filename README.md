@@ -80,7 +80,7 @@ wczytywane automatycznie bez zmiany Compose ani plików śledzonych przez Git.
 
 Model embeddingowy `event-ai` jest przy pierwszym starcie pobierany do trwałego
 wolumenu Dockera. Kolejne odtworzenia kontenera korzystają z cache i nie pobierają
-modelu ponownie.
+modelu ponownie. Healthcheck uwzględnia do 10 minut na ten pierwszy rozruch.
 
 ## Codzienna praca
 
