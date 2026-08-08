@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+for name in PLAYWRIGHT_AUTH_EMAIL PLAYWRIGHT_AUTH_PASSWORD; do
+  secret_file="/run/secrets/${name}"
+  if [[ -f "${secret_file}" ]]; then
+    printf -v "${name}" '%s' "$(<"${secret_file}")"
+    export "${name}"
+  fi
+done
+
+exec sh -lc 'npm ci && npm run test:e2e:ai'
