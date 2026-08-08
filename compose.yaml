@@ -92,6 +92,7 @@ services:
         target: /run/secrets
         read_only: true
       - event-ai-logs:/app/logs
+      - event-ai-model-cache:/root/.cache/huggingface
     depends_on:
       postgres:
         condition: service_healthy
@@ -111,7 +112,7 @@ services:
       context: ${NEXT_TO_YOU_PATH:-../next-to-you}
     restart: unless-stopped
     environment:
-      SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
+      SPRING_CONFIG_IMPORT: optional:configtree:/run/local-defaults/,optional:configtree:/run/secrets/
       SERVER_ADDRESS: 0.0.0.0
       DB_URL: jdbc:postgresql://postgres:5432/next_to_you
       DB_USERNAME: postgres
@@ -132,6 +133,7 @@ services:
     ports:
       - "${NEXT_TO_YOU_PORT:-8100}:8100"
     volumes:
+      - ./config/next-to-you/local-defaults:/run/local-defaults:ro
       - type: bind
         source: ${EVENT_MAP_SECRETS_DIR:?Uruchom make secrets-init}/next-to-you
         target: /run/secrets
@@ -201,6 +203,7 @@ volumes:
   qdrant-data:
   redis-data:
   event-ai-logs:
+  event-ai-model-cache:
   playwright-node-modules:
   playwright-results:
 

@@ -73,6 +73,15 @@ Lista wszystkich nazw, profili i przeznaczenia jest wersjonowana w
 pustych plików sekretów, ponieważ mogłyby nadpisywać bezpieczne wartości domyślne
 pustym stringiem.
 
+Jawne wartości w `config/next-to-you/local-defaults` nie są sekretami. Pozwalają
+uruchomić aplikację bez konfigurowania opcjonalnego Google OAuth. Pliki z lokalnego
+katalogu sekretów mają nad nimi pierwszeństwo, więc ustawione dane Google są
+wczytywane automatycznie bez zmiany Compose ani plików śledzonych przez Git.
+
+Model embeddingowy `event-ai` jest przy pierwszym starcie pobierany do trwałego
+wolumenu Dockera. Kolejne odtworzenia kontenera korzystają z cache i nie pobierają
+modelu ponownie.
+
 ## Codzienna praca
 
 ```bash
