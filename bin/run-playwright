@@ -9,4 +9,4 @@ for name in PLAYWRIGHT_AUTH_EMAIL PLAYWRIGHT_AUTH_PASSWORD; do
   fi
 done
 
-exec sh -lc 'npm ci && npm run test:e2e:ai'
+exec sh -lc 'npm ci --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 && npm run test:e2e:ai'

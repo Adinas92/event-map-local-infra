@@ -94,6 +94,10 @@ make down
 make test-e2e    # Playwright AI smoke w kontenerze
 ```
 
+Runner używa efemerycznego `node_modules` i trwałego cache paczek npm. Przerwane
+pobranie nie uszkadza kolejnego uruchomienia, a chwilowe błędy registry są
+ponawiane automatycznie.
+
 Usunięcie wolumenów jest chronione jawnym potwierdzeniem:
 
 ```bash

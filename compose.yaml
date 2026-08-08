@@ -185,13 +185,15 @@ services:
     command: ["/opt/event-map/run-playwright"]
     volumes:
       - ${NEXT_TO_YOU_UI_PATH:-../next-to-you-ui}:/workspace
-      - playwright-node-modules:/workspace/node_modules
+      - playwright-npm-cache:/root/.npm
       - playwright-results:/workspace/test-results
       - ./bin/run-playwright:/opt/event-map/run-playwright:ro
       - type: bind
         source: ${EVENT_MAP_SECRETS_DIR:?Uruchom make secrets-init}/playwright
         target: /run/secrets
         read_only: true
+    tmpfs:
+      - /workspace/node_modules
     depends_on:
       next-to-you-ui:
         condition: service_healthy
@@ -204,7 +206,7 @@ volumes:
   redis-data:
   event-ai-logs:
   event-ai-model-cache:
-  playwright-node-modules:
+  playwright-npm-cache:
   playwright-results:
 
 networks:
