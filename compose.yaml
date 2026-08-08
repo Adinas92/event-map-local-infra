@@ -79,6 +79,8 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       NTY_INGESTION_BASE_URL: http://next-to-you:8100
       NTY_MCP_BASE_URL: http://next-to-you:8100
+      NTY_MCP_OAUTH_TOKEN_URL: ${NTY_MCP_OAUTH_TOKEN_URL:-}
+      NTY_MCP_OAUTH_AUDIENCE: ${NTY_MCP_OAUTH_AUDIENCE:-}
       STAGE_N_SMOKE_EVENTMAP_BASE_URL: http://event-ai:8000
       STAGE_N_SMOKE_NTY_READ_URL: http://next-to-you:8100
       CRAWL4_AI_BASE_DIRECTORY: /tmp

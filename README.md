@@ -27,11 +27,13 @@ Projects/
 ## Szybki start
 
 ```bash
-cp .env.example .env
-make secrets-init
+make setup
 make up
 make status
 ```
+
+`make setup` tworzy lokalne `.env`, katalogi sekretów, generuje klucz JWT i
+pokazuje pełną tabelę oczekiwanych nazw jako `SET` albo `MISSING`.
 
 Usługi:
 
@@ -50,6 +52,7 @@ Sekretów nie zapisujemy w `.env`, Compose ani Git. Domyślny katalog to
 
 ```bash
 make secrets-list
+make secrets-check PROFILE=full-ai
 make secrets-set SERVICE=event-ai NAME=OPENAI_API_KEY
 make secrets-set SERVICE=next-to-you NAME=NTY_EVENTMAP_AI_OAUTH_CLIENT_SECRET
 make secrets-remove SERVICE=event-ai NAME=OPENAI_API_KEY
@@ -64,6 +67,11 @@ właściwego serwisu pod `/run/secrets` w trybie read-only. Więcej informacji:
 przepływu AI ustaw dodatkowo klucz wybranego providera w `event-ai` oraz parę
 `NTY_EVENTMAP_AI_OAUTH_CLIENT_ID` / `NTY_EVENTMAP_AI_OAUTH_CLIENT_SECRET` w
 `next-to-you`.
+
+Lista wszystkich nazw, profili i przeznaczenia jest wersjonowana w
+[`config/secrets-manifest.tsv`](config/secrets-manifest.tsv). Nie commitujemy
+pustych plików sekretów, ponieważ mogłyby nadpisywać bezpieczne wartości domyślne
+pustym stringiem.
 
 ## Codzienna praca
 

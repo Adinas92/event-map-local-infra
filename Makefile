@@ -1,14 +1,26 @@
 COMPOSE := ./bin/compose
 SERVICE ?=
 NAME ?=
+PROFILE ?=core
 
-.PHONY: secrets-init secrets-list secrets-set secrets-remove config build up infra-up down reset logs status test-e2e
+.PHONY: setup secrets-init secrets-list secrets-status secrets-check secrets-set secrets-remove config build up infra-up down reset logs status test-e2e
+
+setup:
+	@test -f .env || cp .env.example .env
+	@./bin/secrets init
+	@./bin/secrets status
 
 secrets-init:
 	@./bin/secrets init
 
 secrets-list:
-	@./bin/secrets list
+	@./bin/secrets status
+
+secrets-status:
+	@./bin/secrets status
+
+secrets-check:
+	@./bin/secrets check "$(PROFILE)"
 
 secrets-set:
 	@./bin/secrets set "$(SERVICE)" "$(NAME)"

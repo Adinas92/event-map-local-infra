@@ -25,8 +25,9 @@ Nazwa pliku jest nazwą ustawienia, np.:
 ## Obsługa
 
 ```bash
-make secrets-init
-make secrets-list
+make setup
+make secrets-status
+make secrets-check PROFILE=full-ai
 make secrets-set SERVICE=event-ai NAME=OPENAI_API_KEY
 make secrets-remove SERVICE=event-ai NAME=OPENAI_API_KEY
 ```
@@ -34,6 +35,17 @@ make secrets-remove SERVICE=event-ai NAME=OPENAI_API_KEY
 `secrets-list` pokazuje wyłącznie nazwy plików, nigdy wartości.
 Przy pierwszym `secrets-init` helper sam generuje lokalny `APP_AUTH_TOKEN_SECRET`
 dla backendu i również nigdy go nie wypisuje.
+
+Źródłem prawdy dla wymaganych nazw jest wersjonowany
+`config/secrets-manifest.tsv`. Profile:
+
+- `core` — minimalny start i lokalne logowanie;
+- `full-ai` — komunikacja S2S oraz co najmniej jeden provider LLM;
+- `e2e-auth` — konto dla testów Playwright wymagających logowania;
+- `optional` — integracje niewymagane do podstawowego startu.
+
+Na nowym komputerze `make setup` pokazuje komplet brakujących nazw bez tworzenia
+pustych plików i bez wyświetlania jakiejkolwiek wartości.
 
 ## Granica bezpieczeństwa
 
