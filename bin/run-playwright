@@ -9,4 +9,8 @@ for name in PLAYWRIGHT_AUTH_EMAIL PLAYWRIGHT_AUTH_PASSWORD; do
   fi
 done
 
+python3 /opt/event-map/playwright-proxy.py &
+proxy_pid=$!
+trap 'kill "${proxy_pid}" 2>/dev/null || true' EXIT
+
 exec sh -lc 'npm ci --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 && npm run test:e2e:ai'

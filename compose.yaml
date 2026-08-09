@@ -180,20 +180,22 @@ services:
     profiles: [test]
     working_dir: /workspace
     environment:
-      PLAYWRIGHT_BASE_URL: http://next-to-you-ui
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:4200
       PLAYWRIGHT_EXTERNAL_SERVER: "true"
+      PLAYWRIGHT_PROXY_TARGET_HOST: next-to-you-ui
     command: ["/opt/event-map/run-playwright"]
     volumes:
       - ${NEXT_TO_YOU_UI_PATH:-../next-to-you-ui}:/workspace
       - playwright-npm-cache:/root/.npm
       - playwright-results:/workspace/test-results
       - ./bin/run-playwright:/opt/event-map/run-playwright:ro
+      - ./bin/playwright-proxy.py:/opt/event-map/playwright-proxy.py:ro
       - type: bind
         source: ${EVENT_MAP_SECRETS_DIR:?Uruchom make secrets-init}/playwright
         target: /run/secrets
         read_only: true
     tmpfs:
-      - /workspace/node_modules
+      - /workspace/node_modules:exec
     depends_on:
       next-to-you-ui:
         condition: service_healthy

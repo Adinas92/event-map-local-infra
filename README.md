@@ -96,7 +96,9 @@ make test-e2e    # Playwright AI smoke w kontenerze
 
 Runner używa efemerycznego `node_modules` i trwałego cache paczek npm. Przerwane
 pobranie nie uszkadza kolejnego uruchomienia, a chwilowe błędy registry są
-ponawiane automatycznie.
+ponawiane automatycznie. Lokalny proxy w kontenerze udostępnia UI przeglądarce
+pod `127.0.0.1`, dzięki czemu API wymagające secure context działa tak samo jak
+przy zwykłym lokalnym uruchomieniu.
 
 Usunięcie wolumenów jest chronione jawnym potwierdzeniem:
 
