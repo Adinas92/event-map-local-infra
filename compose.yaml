@@ -160,6 +160,8 @@ services:
     build:
       context: ${NEXT_TO_YOU_UI_PATH:-../next-to-you-ui}
     restart: unless-stopped
+    environment:
+      CARTO_BASEMAPS_API_KEY: ${CARTO_BASEMAPS_API_KEY:-}
     ports:
       - "${NEXT_TO_YOU_UI_PORT:-4200}:80"
     volumes:
