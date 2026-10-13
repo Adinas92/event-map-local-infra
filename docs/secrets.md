@@ -33,6 +33,19 @@ make secrets-remove SERVICE=event-ai NAME=OPENAI_API_KEY
 ```
 
 `secrets-list` pokazuje wyłącznie nazwy plików, nigdy wartości.
+Zmienne z konfiguracji IntelliJ `next-to-you [bootRunDev]` można przechowywać
+pod nazwami z manifestu w katalogu `next-to-you`. Wszystkie nazwy z tego
+profilu są oznaczone jako `optional`; ich status `SET` oznacza zapis na hoście,
+nie potwierdza użycia przez aplikację. Compose jawnie ustawia własne wartości
+dla lokalnej bazy, MailHog, AWS i CORS, więc te ustawienia mają pierwszeństwo
+nad wartościami zapisanymi w plikach. `APP_AUTH_TOKENSECRET` z IDE ma inną
+pisownię niż używane przez aplikację `APP_AUTH_TOKEN_SECRET`; lokalny klucz
+JWT pozostaje pod właściwą nazwą.
+
+Dla logowania Google w lokalnym UI klient OAuth musi mieć w Google Cloud
+dokładnie autoryzowany URI przekierowania
+`http://localhost:4200/login/oauth2/code/google`. Samo zapisanie identyfikatora
+i sekretu klienta nie usuwa błędu `redirect_uri_mismatch`.
 Przy pierwszym `secrets-init` helper sam generuje lokalny `APP_AUTH_TOKEN_SECRET`
 dla backendu i również nigdy go nie wypisuje.
 
