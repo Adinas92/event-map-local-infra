@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+default_config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}"
+export EVENT_MAP_SECRETS_DIR="${EVENT_MAP_SECRETS_DIR:-${default_config_dir}/event-map/secrets}"
+
+cd "${repo_dir}"
+exec docker compose "$@"

@@ -1,0 +1,218 @@
+name: ${COMPOSE_PROJECT_NAME:-event-map-local}
+
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.5-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *bounded-logging
+    networks: [event-map]
+
+  qdrant:
+    image: qdrant/qdrant:v1.7.3
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    logging: *bounded-logging
+    networks: [event-map]
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *bounded-logging
+    networks: [event-map]
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    restart: unless-stopped
+    ports:
+      - "${MAILHOG_SMTP_PORT:-4220}:1025"
+      - "${MAILHOG_UI_PORT:-8025}:8025"
+    logging: *bounded-logging
+    networks: [event-map]
+
+  event-ai:
+    build:
+      context: ${EVENT_AI_PATH:-../event-ai}
+    restart: unless-stopped
+    command: ["sh", "-c", "alembic upgrade head && exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      API_RELOAD: "false"
+      EVENT_MAP_SECRETS_DIR: /run/secrets
+      POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/events
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_URL: http://qdrant:6333
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      NTY_INGESTION_BASE_URL: http://next-to-you:8100
+      NTY_MCP_BASE_URL: http://next-to-you:8100
+      NTY_MCP_OAUTH_TOKEN_URL: ${NTY_MCP_OAUTH_TOKEN_URL:-}
+      NTY_MCP_OAUTH_AUDIENCE: ${NTY_MCP_OAUTH_AUDIENCE:-}
+      STAGE_N_SMOKE_EVENTMAP_BASE_URL: http://event-ai:8000
+      STAGE_N_SMOKE_NTY_READ_URL: http://next-to-you:8100
+      CRAWL4_AI_BASE_DIRECTORY: /tmp
+    ports:
+      - "${EVENT_AI_PORT:-8000}:8000"
+    volumes:
+      - type: bind
+        source: ${EVENT_MAP_SECRETS_DIR:?Uruchom make secrets-init}/event-ai
+        target: /run/secrets
+        read_only: true
+      - event-ai-logs:/app/logs
+      - event-ai-model-cache:/root/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 10m
+    logging: *bounded-logging
+    networks: [event-map]
+
+  next-to-you:
+    build:
+      context: ${NEXT_TO_YOU_PATH:-../next-to-you}
+    restart: unless-stopped
+    environment:
+      SPRING_CONFIG_IMPORT: optional:configtree:/run/local-defaults/,optional:configtree:/run/secrets/
+      SERVER_ADDRESS: 0.0.0.0
+      DB_URL: jdbc:postgresql://postgres:5432/next_to_you
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      REDIS_URL: redis://redis:6379
+      AI_SEARCH_ENABLED: ${AI_SEARCH_ENABLED:-true}
+      AI_SEARCH_REDIS_ENABLED: ${AI_SEARCH_REDIS_ENABLED:-true}
+      NTY_EVENTMAP_AI_BASE_URL: http://event-ai:8000
+      MAIL_SENDER_HOST: mailhog
+      MAIL_SENDER_PORT: 1025
+      MAIL_SENDER_USERNAME: local
+      MAIL_SENDER_PASSWORD: local
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: "false"
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "false"
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      NTY_CORS_ORIGIN_LOCAL_ANGULAR: http://localhost:${NEXT_TO_YOU_UI_PORT:-4200}
+    ports:
+      - "${NEXT_TO_YOU_PORT:-8100}:8100"
+    volumes:
+      - ./config/next-to-you/local-defaults:/run/local-defaults:ro
+      - type: bind
+        source: ${EVENT_MAP_SECRETS_DIR:?Uruchom make secrets-init}/next-to-you
+        target: /run/secrets
+        read_only: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+      event-ai:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8100; printf \"GET /actuator/health HTTP/1.0\\r\\n\\r\\n\" >&3; grep -q \"200\" <&3'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 45s
+    logging: *bounded-logging
+    networks: [event-map]
+
+  next-to-you-ui:
+    build:
+      context: ${NEXT_TO_YOU_UI_PATH:-../next-to-you-ui}
+    restart: unless-stopped
+    environment:
+      CARTO_BASEMAPS_API_KEY: ${CARTO_BASEMAPS_API_KEY:-}
+    ports:
+      - "${NEXT_TO_YOU_UI_PORT:-4200}:80"
+    volumes:
+      - ./config/next-to-you-ui/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      next-to-you:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    logging: *bounded-logging
+    networks: [event-map]
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.60.0-noble
+    profiles: [test]
+    working_dir: /workspace
+    environment:
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:4200
+      PLAYWRIGHT_EXTERNAL_SERVER: "true"
+      PLAYWRIGHT_PROXY_TARGET_HOST: next-to-you-ui
+    command: ["/opt/event-map/run-playwright"]
+    volumes:
+      - ${NEXT_TO_YOU_UI_PATH:-../next-to-you-ui}:/workspace
+      - playwright-npm-cache:/root/.npm
+      - playwright-results:/workspace/test-results
+      - ./bin/run-playwright:/opt/event-map/run-playwright:ro
+      - ./bin/playwright-proxy.py:/opt/event-map/playwright-proxy.py:ro
+      - type: bind
+        source: ${EVENT_MAP_SECRETS_DIR:?Uruchom make secrets-init}/playwright
+        target: /run/secrets
+        read_only: true
+    tmpfs:
+      - /workspace/node_modules:exec
+    depends_on:
+      next-to-you-ui:
+        condition: service_healthy
+    logging: *bounded-logging
+    networks: [event-map]
+
+volumes:
+  postgres-data:
+  qdrant-data:
+  redis-data:
+  event-ai-logs:
+  event-ai-model-cache:
+  playwright-npm-cache:
+  playwright-results:
+
+networks:
+  event-map:
+    driver: bridge
