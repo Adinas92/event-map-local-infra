@@ -11,6 +11,15 @@ Repozytorium uruchamia pełny lokalny stack projektu Next To You / Event Map:
 - `next-to-you-ui`,
 - Playwright uruchamiany w kontenerze na żądanie.
 
+To repo odpowiada za lokalne uruchomienie usług. [Wiki Event Map](https://github.com/Adinas92/event-map-docs) jest źródłem wiedzy o produkcie, architekturze, ADR, standardach i procesach; zacznij od [indeksu wiki](https://github.com/Adinas92/event-map-docs/blob/main/docs/README.md), a przy pracy agentowej od [indeksu LLM](https://github.com/Adinas92/event-map-docs/blob/main/docs/llm/index.md).
+
+## Wymagania
+
+- Docker Engine lub Docker Desktop z `docker compose` i uruchomionym daemonem.
+- `make` oraz powłoka zgodna ze skryptami `bin/`.
+- Sąsiednie checkouty trzech repozytoriów kodu (lub ich ścieżki w `.env`).
+- Wolne porty z `.env.example`; pierwszy build i pobranie modelu embeddingowego wymagają połączenia z siecią.
+
 ## Wymagany układ repozytoriów
 
 ```text
@@ -49,6 +58,9 @@ Usługi:
 
 Sekretów nie zapisujemy w `.env`, Compose ani Git. Domyślny katalog to
 `~/.config/event-map/secrets`; można go zmienić przez `EVENT_MAP_SECRETS_DIR`.
+`CARTO_BASEMAPS_API_KEY` w `.env` jest wyjątkiem nazewniczym: trafia do
+przeglądarki i żądań kafelków, więc jest kluczem publicznym ograniczanym do
+lokalnego hosta, a nie sekretem serwerowym. Nie commituj jego wartości.
 
 ```bash
 make secrets-list
@@ -93,6 +105,10 @@ make status
 make down
 make test-e2e    # Playwright AI smoke w kontenerze
 ```
+
+`make test-e2e` uruchamiaj po `make up`, gdy aplikacje są gotowe. Testy i start
+pojedynczej usługi opisuje README danego repo; ten runner sprawdza przepływ
+między usługami. Błędy i zadania zgłaszaj na [boardzie Event Map](https://trello.com/b/a05lbtJj/event-map).
 
 Runner używa efemerycznego `node_modules` i trwałego cache paczek npm. Przerwane
 pobranie nie uszkadza kolejnego uruchomienia, a chwilowe błędy registry są
