@@ -14,3 +14,5 @@ To repo jest wyłącznie orkiestratorem lokalnego środowiska Event Map.
 - Nie wypisuj środowiska kontenerów ani zawartości `/run/secrets`.
 - Zmiana kontraktu konfiguracji wymaga równoległej aktualizacji dokumentacji.
 - Nie usuwaj wolumenów bez jawnego `CONFIRM=yes` od użytkownika.
+
+Stosuj [wspólny standard bezpieczeństwa danych i sekretów](https://github.com/Adinas92/event-map-docs/blob/main/docs/standards/bezpieczenstwo-danych-i-sekretow.md), także dla danych syntetycznych, logów, fixture i artefaktów CI. Kontrolę offline uruchom przez `python3 scripts/security_scan.py` po zainstalowaniu `detect-secrets==1.5.0`; wynik zawiera tylko lokalizacje.
