@@ -15,7 +15,8 @@ To repo odpowiada za lokalne uruchomienie usług. [Wiki Event Map](https://githu
 
 ## Wymagania
 
-- Docker Engine lub Docker Desktop z `docker compose` i uruchomionym daemonem.
+- Docker Engine/Desktop z `docker compose` albo Podman z dostępnym providerem `podman compose`; silnik musi działać.
+- Python 3.10+ i Git do nowego adaptera E2E.
 - `make` oraz powłoka zgodna ze skryptami `bin/`.
 - Sąsiednie checkouty trzech repozytoriów kodu (lub ich ścieżki w `.env`).
 - Wolne porty z `.env.example`; pierwszy build i pobranie modelu embeddingowego wymagają połączenia z siecią.
@@ -103,18 +104,38 @@ make logs        # zbiorcze logi z ograniczonym backlogiem
 make logs SERVICE=event-ai
 make status
 make down
-make test-e2e    # Playwright AI smoke w kontenerze
+make test-e2e E2E_REPO=/sciezka/event-map-e2e  # nowa suita entry
+make test-e2e-mocked  # zachowane regresje UI z mockami
 ```
 
-`make test-e2e` uruchamiaj po `make up`, gdy aplikacje są gotowe. Testy i start
-pojedynczej usługi opisuje README danego repo; ten runner sprawdza przepływ
-między usługami. Błędy i zadania zgłaszaj na [boardzie Event Map](https://trello.com/b/a05lbtJj/event-map).
+`make test-e2e` korzysta z czystego checkoutu osobnego `event-map-e2e`.
+Domyślnie buduje/startuje stack, czeka do 900 s na readiness i uruchamia `entry`
+przez istniejący UI, bez drugiego Angular dev servera. Podczas cudzych runów używaj
+`STACK_MODE=existing`, który nie zmienia usług. Wybierz jawnie
+`CONTAINER_ENGINE=docker|podman` (domyślnie Docker); `bin/compose` respektuje ten sam wybór.
 
-Runner używa efemerycznego `node_modules` i trwałego cache paczek npm. Przerwane
-pobranie nie uszkadza kolejnego uruchomienia, a chwilowe błędy registry są
-ponawiane automatycznie. Lokalny proxy w kontenerze udostępnia UI przeglądarce
-pod `127.0.0.1`, dzięki czemu API wymagające secure context działa tak samo jak
-przy zwykłym lokalnym uruchomieniu.
+```sh
+make test-e2e CONTAINER_ENGINE=docker STACK_MODE=existing E2E_REPO=/sciezka/event-map-e2e
+make test-e2e CONTAINER_ENGINE=podman STACK_MODE=existing E2E_REPO=/sciezka/event-map-e2e
+make test-runner
+```
+
+Raport i ograniczona diagnostyka pozostają prywatnie w `reports/<run>/` na hoście.
+Brak silnika, readiness lub raportu daje `BLOCKED` z niezerowym statusem; brak Podmana
+to `NOT RUN` dla zgodności tego silnika. Testy kontraktu nie dowodzą zgodności runtime.
+`entry` rozpoznający bramkę beta nie potwierdza Discovery/loginu/AI. `SUITE=business`
+lub `discovery` wymaga dostarczającej go wersji E2E i prywatnej `FIXTURE=/sciezka/fixture.json`
+(0600, mount read-only). `BASE_URL` wybiera localhost albo127.0.0.1 na porcie4200;
+origin musi odpowiadać fixture. Dane przygotowuje osobno właściciel, bez resetu bazy.
+
+`make test-e2e-mocked` zachowuje stare `npm run test:e2e:ai` z repo UI. Ten zestaw
+podstawia auth/beta/eventy/NDJSON; jego sukces jest dowodem regresji z mockami.
+Nowy adapter usuwa tylko własny kontener i nie zatrzymuje stacku ani wolumenów.
+Wersje usług bez manifestu deploymentu pozostają `unknown`.
+
+Pełna konfiguracja, rootless/UID, DNS/proxy/secure context, kody, wspólny
+`E2E_LOCK_DIR`, retencja i ograniczenia:
+[runbook runnera UI](https://github.com/Adinas92/event-map-docs/blob/main/docs/runbook/ui-suite-runner.md).
 
 Usunięcie wolumenów jest chronione jawnym potwierdzeniem:
 
