@@ -137,6 +137,12 @@ Pełna konfiguracja, rootless/UID, DNS/proxy/secure context, kody, wspólny
 `E2E_LOCK_DIR`, retencja i ograniczenia:
 [runbook runnera UI](https://github.com/Adinas92/event-map-docs/blob/main/docs/runbook/ui-suite-runner.md).
 
+Osobny setup własnej projekcji wyszukiwania udostępnia `bin/index-fixture index|cleanup`.
+Przyjmuje wyłącznie prywatny eksport dwóch UUID z UI, blokuje namespace/ID i zapisuje
+dokładny plan punktów/chunków. Nie wykonuje się automatycznie z testami; potwierdzenie
+indeksacji nie zastępuje weryfikacji przez UI. Kontrakt, ograniczenia i cleanup opisuje
+[procedura własnego indeksu fixture](docs/fixture-index.md).
+
 Usunięcie wolumenów jest chronione jawnym potwierdzeniem:
 
 ```bash
