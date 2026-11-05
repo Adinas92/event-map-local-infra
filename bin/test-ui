@@ -133,6 +133,7 @@ def run(args):
         test_timeout = args.test_timeout or ((timeout_ms + 999) // 1000 + 630)
         report['testTimeoutSeconds'] = test_timeout
         fixture = None
+        attestation_dir = None
         if args.suite != 'entry':
             if not args.fixture:
                 raise Blocked('FIXTURE_FILE_REQUIRED')
@@ -141,6 +142,20 @@ def run(args):
             if (fixture.is_symlink() or not fixture.is_file()
                     or stat.S_IMODE(fixture.stat().st_mode) != 0o600):
                 raise Blocked('FIXTURE_FILE_INVALID')
+            contract = workspace / 'config/dependencies.json'
+            declared = json.loads(contract.read_text()) if contract.is_file() else None
+            if (not isinstance(declared, dict) or declared.get('activeAttestationContract')
+                    != 'fixture-index-slot-v1'):
+                raise Blocked('INDEX_ATTESTATION_CONTRACT_UNSUPPORTED')
+            # Mount the active directory, so atomic replacement/unlink remains visible.
+            # The E2E consumer validates slot fields; the host never reads fixture secrets.
+            index_state = fixture.parent / 'index-state'
+            attestation_dir = index_state / 'datasets'
+            for directory in (index_state, attestation_dir):
+                if (directory.is_symlink() or not directory.is_dir()
+                        or stat.S_IMODE(directory.stat().st_mode) != 0o700
+                        or directory.stat().st_uid != os.getuid()):
+                    raise Blocked('INDEX_ATTESTATION_DIRECTORY_INVALID')
         locks = Path(args.lock_dir).absolute()
         if locks.is_symlink():
             raise Blocked('LOCK_DIRECTORY_INVALID')
@@ -148,7 +163,7 @@ def run(args):
         if stat.S_IMODE(locks.stat().st_mode) != 0o700 or locks.stat().st_uid != os.getuid():
             raise Blocked('LOCK_DIRECTORY_INVALID')
         # Podman relabels only the private snapshot/lock directory, never the source repo.
-        for path in (workspace, fixture, locks, ROOT):
+        for path in (workspace, fixture, attestation_dir, locks, ROOT):
             if path and (',' in str(path) or '\n' in str(path)):
                 raise Blocked('UNSUPPORTED_MOUNT_PATH')
         if args.stack_mode == 'start':
@@ -198,7 +213,8 @@ def run(args):
         if args.engine == 'podman':
             invocation += ['--userns=keep-id']
         if fixture:
-            invocation += ['--mount', f'type=bind,src={fixture},dst=/run/e2e-fixture.json,readonly']
+            invocation += ['--mount', f'type=bind,src={fixture},dst=/run/e2e-fixture.json,readonly',
+                           '--mount', f'type=bind,src={attestation_dir},dst=/run/index-state/datasets,readonly']
         invocation += [IMAGE, '/opt/event-map/run-ui-container', args.base_url, args.suite]
         if fixture:
             invocation += ['--fixture', '/run/e2e-fixture.json']

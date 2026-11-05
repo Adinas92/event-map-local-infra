@@ -58,6 +58,7 @@ class InvocationTests(unittest.TestCase):
         (self.source / 'package.json').write_text(json.dumps({'devDependencies': {'@playwright/test': '1.60.0'}}))
         self.calls = []
         self.suite_config = None
+        self.active_contract = "fixture-index-slot-v1"
         self.test_code = 0
         self.no_report = False
         self.interrupt = False
@@ -84,6 +85,8 @@ class InvocationTests(unittest.TestCase):
             dest = Path(args[-1]); (dest / 'config').mkdir(parents=True)
             if self.suite_config:
                 (dest / 'config/suites.json').write_text(json.dumps(self.suite_config))
+            if self.active_contract is not None:
+                (dest / 'config/dependencies.json').write_text(json.dumps({'activeAttestationContract': self.active_contract}))
             (dest / 'config/scenarios.json').write_text(json.dumps({'scenarios': [
                 {'id': 'UI-ENTRY', 'required': True, 'profiles': ['local'], 'suites': [self.args.suite]}]}))
         if 'ps' in args:
@@ -226,10 +229,89 @@ class InvocationTests(unittest.TestCase):
         self.args.suite = 'business'
         fixture = self.root / 'fixture.json'; fixture.write_text('secret-canary'); fixture.chmod(0o600)
         self.args.fixture = str(fixture)
+        (self.root / 'index-state').mkdir(mode=0o700)
+        (self.root / 'index-state/datasets').mkdir(mode=0o700)
         adapter.run(self.args)
         invocation = next(c for c in self.calls if c[:2] == ['docker', 'run'])
         self.assertIn(f'type=bind,src={fixture},dst=/run/e2e-fixture.json,readonly', invocation)
+        self.assertIn(f'type=bind,src={self.root / "index-state/datasets"},dst=/run/index-state/datasets,readonly', invocation)
+        self.assertNotIn(f'type=bind,src={fixture.parent},', ' '.join(invocation))
         self.assertNotIn('secret-canary', json.dumps(self.result()))
+
+
+    def test_active_attestation_mount_is_directory_only_for_both_engines(self):
+        self.args.engine = 'podman'
+        self.args.suite = 'discovery'
+        fixture = self.root / 'fixture.json'; fixture.write_text('unreadable-as-json-canary'); fixture.chmod(0o600)
+        self.args.fixture = str(fixture)
+        state = self.root / 'index-state'; state.mkdir(mode=0o700)
+        datasets = state / 'datasets'; datasets.mkdir(mode=0o700)
+        adapter.run(self.args)
+        invocation = next(c for c in self.calls if c[:2] == ['podman', 'run'])
+        self.assertIn(f'type=bind,src={datasets},dst=/run/index-state/datasets,readonly', invocation)
+        self.assertFalse(any('-attestation.json' in arg for arg in invocation))
+        self.assertIn('/run/e2e-fixture.json', invocation)
+
+    def test_missing_private_slot_directory_blocks_before_stack_mutation(self):
+        self.args.suite = 'business'; self.args.stack_mode = 'start'
+        fixture = self.root / 'fixture.json'; fixture.write_text('secret-canary'); fixture.chmod(0o600)
+        self.args.fixture = str(fixture)
+        self.assertEqual(adapter.run(self.args), 2)
+        self.assertEqual(self.result()['reason'], 'INDEX_ATTESTATION_DIRECTORY_INVALID')
+        self.assertFalse(any('up' in c or 'run' in c for c in self.calls))
+
+    def test_slot_ancestors_permissions_owner_and_symlinks_fail_closed(self):
+        self.args.suite = 'business'
+        fixture = self.root / 'fixture.json'; fixture.write_text('secret-canary'); fixture.chmod(0o600)
+        self.args.fixture = str(fixture)
+        state = self.root / 'index-state'; state.mkdir(mode=0o700)
+        datasets = state / 'datasets'; datasets.mkdir(mode=0o700)
+        for directory in (state, datasets):
+            directory.chmod(0o755)
+            with self.subTest(mode=directory.name):
+                self.assertEqual(adapter.run(self.args), 2)
+            directory.chmod(0o700)
+        datasets.rmdir(); datasets.symlink_to(self.root, target_is_directory=True)
+        self.assertEqual(adapter.run(self.args), 2)
+        datasets.unlink(); state.rmdir(); state.symlink_to(self.root, target_is_directory=True)
+        self.assertEqual(adapter.run(self.args), 2)
+        self.assertFalse(any('run' in c for c in self.calls))
+
+    def test_foreign_owned_slot_directory_is_rejected_before_runner(self):
+        self.args.suite = 'business'
+        fixture = self.root / 'fixture.json'; fixture.write_text('secret-canary'); fixture.chmod(0o600)
+        self.args.fixture = str(fixture)
+        (self.root / 'index-state').mkdir(mode=0o700)
+        (self.root / 'index-state/datasets').mkdir(mode=0o700)
+        with patch.object(adapter.os, 'getuid', return_value=999999):
+            self.assertEqual(adapter.run(self.args), 2)
+        self.assertEqual(self.result()['reason'], 'INDEX_ATTESTATION_DIRECTORY_INVALID')
+        self.assertFalse(any('run' in c for c in self.calls))
+
+    def test_old_or_unknown_e2e_contract_blocks_before_stack_start(self):
+        self.args.suite = 'business'; self.args.stack_mode = 'start'
+        fixture = self.root / 'fixture.json'; fixture.write_text('secret-canary'); fixture.chmod(0o600)
+        self.args.fixture = str(fixture)
+        self.active_contract = None
+        self.assertEqual(adapter.run(self.args), 2)
+        self.assertEqual(self.result()['reason'], 'INDEX_ATTESTATION_CONTRACT_UNSUPPORTED')
+        self.assertFalse(any('up' in c or 'run' in c for c in self.calls))
+
+    def test_wrong_e2e_contract_blocks_discovery_before_runner(self):
+        self.args.suite = 'discovery'
+        fixture = self.root / 'fixture.json'; fixture.write_text('secret-canary'); fixture.chmod(0o600)
+        self.args.fixture = str(fixture)
+        self.active_contract = 'future-unknown-slot'
+        self.assertEqual(adapter.run(self.args), 2)
+        self.assertEqual(self.result()['reason'], 'INDEX_ATTESTATION_CONTRACT_UNSUPPORTED')
+        self.assertFalse(any('run' in c for c in self.calls))
+
+    def test_entry_does_not_mount_or_require_index_attestation(self):
+        (self.root / 'index-state').mkdir(mode=0o755)
+        self.active_contract = None
+        self.assertEqual(adapter.run(self.args), 0)
+        invocation = next(c for c in self.calls if c[:2] == ['docker', 'run'])
+        self.assertFalse(any('/run/index-state' in arg for arg in invocation))
 
 
 class WrapperTests(unittest.TestCase):

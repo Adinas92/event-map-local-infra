@@ -103,6 +103,22 @@ oraz powrót z zapytania bez wyników. Wyłącznie właściciel suity zapisuje c
 `searchIndex` po takim dowodzie. Samo potwierdzenie indeksacji nie odblokowuje AC,
 nie zmienia manifestu i nie oznacza PASS testu ani gotowości dev.
 
+Capability wiąże się z aktywnym slotem `index-state/datasets/<namespace-key>-attestation.json`
+względem katalogu fixture. E2E odczytuje go pod wspólną blokadą i porównuje wszystkie
+pola, w tym `evidenceRef` bieżącej generacji. Brak pliku po cleanup albo zastąpienie
+po reindeksacji daje `BLOCKED` do ponownej weryfikacji UI. Nie kopiuj starego
+potwierdzenia ani nie przywracaj capability ręcznie.
+
+Kontenerowy adapter `business/discovery` montuje tylko katalog `datasets` RO do
+`/run/index-state/datasets`; fixture pozostaje osobnym plikiem RO. Mount katalogu
+zapewnia widoczność atomowego unlink/replace; mount pojedynczego potwierdzenia byłby
+nieaktualnym inode. Producent E2E deklaruje w publicznym `config/dependencies.json`
+`activeAttestationContract: "fixture-index-slot-v1"`; adapter odrzuca starszy lub
+nieznany kontrakt przed startem stacku. Host wymaga obu katalogów `index-state` i `datasets` jako `0700`,
+własności operatora i bez dowiązań. Ten adapter obsługuje standardowy `state-dir`
+obok fixture; niestandardowa ścieżka poza tym slotem nie jest mapowana automatycznie.
+
+
 ## Ponowienie, błąd i cleanup
 
 Powtórzenie tego samego eksportu i właściciela aktualizuje te same własne punkty.

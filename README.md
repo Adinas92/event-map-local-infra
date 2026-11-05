@@ -125,7 +125,12 @@ Brak silnika, readiness lub raportu daje `BLOCKED` z niezerowym statusem; brak P
 to `NOT RUN` dla zgodności tego silnika. Testy kontraktu nie dowodzą zgodności runtime.
 `entry` rozpoznający bramkę beta nie potwierdza Discovery/loginu/AI. `SUITE=business`
 lub `discovery` wymaga dostarczającej go wersji E2E i prywatnej `FIXTURE=/sciezka/fixture.json`
-(0600, mount read-only). `BASE_URL` wybiera localhost albo127.0.0.1 na porcie4200;
+(0600, mount read-only). Wymaga też prywatnych katalogów `index-state/datasets`
+obok fixture (oba 0700, właściciel operatora, bez dowiązań). Adapter montuje katalog
+aktualnych potwierdzeń RO. Publiczny `config/dependencies.json` w czystym E2E musi
+deklarować `activeAttestationContract: "fixture-index-slot-v1"`; starszy kontrakt daje
+`BLOCKED` przed startem stacku. E2E sprawdza aktywny slot po atomowym usunięciu
+lub zastąpieniu; nie czyta poświadczeń fixture. `BASE_URL` wybiera localhost albo127.0.0.1 na porcie4200;
 origin musi odpowiadać fixture. Dane przygotowuje osobno właściciel, bez resetu bazy.
 
 `make test-e2e-mocked` zachowuje stare `npm run test:e2e:ai` z repo UI. Ten zestaw
