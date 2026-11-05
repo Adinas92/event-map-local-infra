@@ -170,8 +170,11 @@ def run(args):
                     ready = False
                     continue
                 # Read only state, never Config.Env, mounts, or secrets.
-                status = command([args.engine, 'inspect', '--format',
-                                  '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}', container_id], timeout=min(10, max(0.1, deadline - time.monotonic())))
+                template = '{{.State.Status}}'
+                if service in HEALTH:
+                    template += ' {{.State.Health.Status}}'
+                status = command([args.engine, 'inspect', '--format', template, container_id],
+                                 timeout=min(10, max(0.1, deadline - time.monotonic())))
                 parts = status.stdout.strip().split()
                 if status.returncode or not parts or parts[0] != 'running' or (service in HEALTH and parts[1:] != ['healthy']):
                     ready = False

@@ -89,7 +89,10 @@ class InvocationTests(unittest.TestCase):
         if 'ps' in args:
             output = 'a' * 64
         if 'inspect' in args:
-            output = 'running healthy' if not self.not_ready else 'running starting'
+            # Health-less services must not access an optional missing map key.
+            self.assertNotIn('if .State.Health', args[3])
+            self.assertIn(args[3], ['{{.State.Status}}', '{{.State.Status}} {{.State.Health.Status}}'])
+            output = ('running healthy' if not self.not_ready else 'running starting') if '.State.Health.Status' in args[3] else 'running'
         return subprocess.CompletedProcess(args, 0, output)
 
     def popen(self, invocation, **kwargs):

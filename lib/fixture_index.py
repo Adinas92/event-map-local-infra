@@ -155,9 +155,12 @@ def runtime(engine, project):
                               'ps', '-q', service])
             if not re.fullmatch(r'[a-f0-9]{12,64}', container):
                 raise SetupError('LOCAL_PROJECTION_CONTAINER_UNAVAILABLE')
-            facts = tool([engine, 'inspect', '--format',
-                          '{{.Id}} {{.Image}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}',
-                          container]).split()
+            # Qdrant has no healthcheck. Avoid looking up an optional State.Health key;
+            # Docker may reject that template, while Podman's State may be a struct.
+            template = '{{.Id}} {{.Image}} {{.State.Status}}'
+            if service == 'event-ai':
+                template += ' {{.State.Health.Status}}'
+            facts = tool([engine, 'inspect', '--format', template, container]).split()
             if (len(facts) not in {3, 4} or not re.fullmatch(r'[a-f0-9]{64}', facts[0])
                     or not re.fullmatch(r'sha256:[a-f0-9]{64}', facts[1]) or facts[2] != 'running'
                     or (service == 'event-ai' and facts[3:] != ['healthy'])):

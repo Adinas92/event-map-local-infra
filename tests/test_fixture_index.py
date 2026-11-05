@@ -353,7 +353,10 @@ class RuntimeWiringTests(unittest.TestCase):
                 self.assertIn('own-project', args)
                 return ('a' if args[-1] == 'event-ai' else 'b') * 64
             self.assertEqual(args[0:2], ['podman', 'inspect'])
-            self.assertEqual(args[3], '{{.Id}} {{.Image}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}')
+            expected = '{{.Id}} {{.Image}} {{.State.Status}}'
+            if args[-1] == 'a'*64:
+                expected += ' {{.State.Health.Status}}'
+            self.assertEqual(args[3], expected)
             return args[-1] + ' sha256:' + 'c'*64 + ' running' + (' healthy' if args[-1] == 'a'*64 else '')
         with patch.dict(os.environ, {'CONTAINER_ENGINE': 'original'}), patch.object(host, 'tool', side_effect=tool):
             container, metadata = host.runtime('podman', 'own-project')
