@@ -12,7 +12,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: postgres # pragma: allowlist secret -- synthetic local/test fixture; no external credential
       POSTGRES_DB: postgres
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
@@ -72,7 +72,7 @@ services:
       API_PORT: 8000
       API_RELOAD: "false"
       EVENT_MAP_SECRETS_DIR: /run/secrets
-      POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/events
+      POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/events # pragma: allowlist secret -- synthetic local/test fixture; no external credential
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
       QDRANT_URL: http://qdrant:6333
@@ -116,7 +116,7 @@ services:
       SERVER_ADDRESS: 0.0.0.0
       DB_URL: jdbc:postgresql://postgres:5432/next_to_you
       DB_USERNAME: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: postgres # pragma: allowlist secret -- synthetic local/test fixture; no external credential
       REDIS_URL: redis://redis:6379
       AI_SEARCH_ENABLED: ${AI_SEARCH_ENABLED:-true}
       AI_SEARCH_REDIS_ENABLED: ${AI_SEARCH_REDIS_ENABLED:-true}
@@ -124,11 +124,11 @@ services:
       MAIL_SENDER_HOST: mailhog
       MAIL_SENDER_PORT: 1025
       MAIL_SENDER_USERNAME: local
-      MAIL_SENDER_PASSWORD: local
+      MAIL_SENDER_PASSWORD: local # pragma: allowlist secret -- synthetic local/test fixture; no external credential
       SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: "false"
       SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "false"
       AWS_ACCESS_KEY_ID: local
-      AWS_SECRET_ACCESS_KEY: local
+      AWS_SECRET_ACCESS_KEY: local # pragma: allowlist secret -- synthetic local/test fixture; no external credential
       NTY_CORS_ORIGIN_LOCAL_ANGULAR: http://localhost:${NEXT_TO_YOU_UI_PORT:-4200}
     ports:
       - "${NEXT_TO_YOU_PORT:-8100}:8100"

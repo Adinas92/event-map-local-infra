@@ -6,4 +6,28 @@ blob-report/
 *.log
 
 reports/
+
+# Private runtime data and security scanner output
+.ai/
+.env
+.env.*
+!.env.example
+!.env.template
+!.env.sample
+.playwright-auth/
+.playwright-private-results/
+**/storage-state.json
+**/*auth-state.json
+*.dump
+dump.sql
+*.backup
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+secrets.json
+credentials.json
+
+# Python scanner caches
 __pycache__/
+*.py[cod]

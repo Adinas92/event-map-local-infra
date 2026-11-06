@@ -204,7 +204,7 @@ def run(args):
         invocation = [args.engine, 'run', '--rm', '--name', name,
                       '--init', '--network', args.project + '_event-map', '--shm-size', '1g',
                       '--user', f'{os.getuid()}:{os.getgid()}', '--workdir', '/workspace',
-                      '--env', 'HOME=/tmp', '--env', 'E2E_LOCK_DIR=/run/e2e-locks', '--env', 'PLAYWRIGHT_BROWSERS_PATH=/ms-playwright',
+                      '--env', 'HOME=/tmp', '--env', 'E2E_LOCK_DIR=/run/e2e-locks', '--env', 'PLAYWRIGHT_BROWSERS_PATH=/ms-playwright',  # pragma: allowlist secret -- public runner directory paths, not credentials
                       '--mount', f'type=bind,src={workspace},dst=/workspace',
                       '--mount', f'type=bind,src={locks},dst=/run/e2e-locks',
                       '--mount', f'type=bind,src={output},dst=/run/runner-output',
