@@ -384,7 +384,7 @@ class RuntimeWiringTests(unittest.TestCase):
 
     def test_remote_or_credentialed_qdrant_targets_fail_before_client(self):
         for url in ['https://qdrant:6333', 'http://remote:6333', 'http://qdrant:6333/path',
-                    'http://user:canary@qdrant:6333', 'http://qdrant:6333/?api_key=canary']:
+                    'http://user:canary@qdrant:6333', 'http://qdrant:6333/?api_key=canary']:  # pragma: allowlist secret -- synthetic rejected URLs, no external credentials
             module = types.ModuleType('app.config.settings'); module.Settings = lambda: self.settings(url)
             qdrant = types.ModuleType('qdrant_client')
             from unittest.mock import Mock

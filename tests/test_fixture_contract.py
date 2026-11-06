@@ -74,7 +74,7 @@ class InventoryTests(unittest.TestCase):
 
     def test_rejects_noncanonical_or_remote_targets(self):
         for url in ("http://localhost:4200//", "http://LOCALHOST:4200/", "http://localhost:4200/?x=1",
-                    "http://user:secret@localhost:4200/", "http://localhost:4200/#x", "https://localhost:4200/",
+                    "http://user:secret@localhost:4200/", "http://localhost:4200/#x", "https://localhost:4200/",  # pragma: allowlist secret -- synthetic rejected URL for validation test
                     "http://localhost:80/", "http://example.test:4200/", "http://[::1]:4200/", None):
             with self.subTest(url=url):
                 value = inventory()
@@ -91,7 +91,7 @@ class InventoryTests(unittest.TestCase):
                     for key in path:
                         target = target[key]
                     if operation == "extra":
-                        target["actors"] = {"password": "must-never-appear-in-error"}
+                        target["actors"] = {"password": "must-never-appear-in-error"}  # pragma: allowlist secret -- synthetic error-redaction sentinel
                     else:
                         del target[next(iter(target))]
                     self.assert_invalid(value)
