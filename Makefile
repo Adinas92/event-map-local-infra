@@ -2,8 +2,14 @@ COMPOSE := ./bin/compose
 SERVICE ?=
 NAME ?=
 PROFILE ?=core
+CONTAINER_ENGINE ?=docker
+E2E_REPO ?=../event-map-e2e
+SUITE ?=entry
+STACK_MODE ?=start
+BASE_URL ?=http://127.0.0.1:4200
+export CONTAINER_ENGINE
 
-.PHONY: setup secrets-init secrets-list secrets-status secrets-check secrets-set secrets-remove config build up infra-up down reset logs status test-e2e
+.PHONY: setup secrets-init secrets-list secrets-status secrets-check secrets-set secrets-remove config build up infra-up down reset logs status test-e2e test-e2e-mocked test-runner
 
 setup:
 	@test -f .env || cp .env.example .env
@@ -53,5 +59,11 @@ logs:
 status:
 	@$(COMPOSE) ps
 
-test-e2e: secrets-init
+test-e2e:
+	@./bin/test-ui --engine "$(CONTAINER_ENGINE)" --e2e-repo "$(E2E_REPO)" --suite "$(SUITE)" --stack-mode "$(STACK_MODE)" --base-url "$(BASE_URL)" $(if $(FIXTURE),--fixture "$(FIXTURE)") $(if $(TEST_TIMEOUT),--test-timeout "$(TEST_TIMEOUT)")
+
+test-runner:
+	@python3 -m unittest discover -s tests -v
+
+test-e2e-mocked: secrets-init
 	@$(COMPOSE) --profile test run --rm playwright

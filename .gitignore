@@ -5,6 +5,8 @@ playwright-report/
 blob-report/
 *.log
 
+reports/
+
 # Private runtime data and security scanner output
 .ai/
 .env
