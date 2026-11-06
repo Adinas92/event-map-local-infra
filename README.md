@@ -15,7 +15,8 @@ To repo odpowiada za lokalne uruchomienie usług. [Wiki Event Map](https://githu
 
 ## Wymagania
 
-- Docker Engine/Desktop z `docker compose` albo Podman z dostępnym providerem `podman compose`; silnik musi działać.
+- Podman z uruchomioną maszyną rootless i providerem `podman-compose`; silnik musi działać.
+  Docker jest opcjonalnym, jawnym trybem zgodności.
 - Python 3.10+ i Git do nowego adaptera E2E.
 - `make` oraz powłoka zgodna ze skryptami `bin/`.
 - Sąsiednie checkouty trzech repozytoriów kodu (lub ich ścieżki w `.env`).
@@ -92,7 +93,7 @@ katalogu sekretów mają nad nimi pierwszeństwo, więc ustawione dane Google s�
 wczytywane automatycznie bez zmiany Compose ani plików śledzonych przez Git.
 
 Model embeddingowy `event-ai` jest przy pierwszym starcie pobierany do trwałego
-wolumenu Dockera. Kolejne odtworzenia kontenera korzystają z cache i nie pobierają
+wolumenu silnika kontenerowego. Kolejne odtworzenia kontenera korzystają z cache i nie pobierają
 modelu ponownie. Healthcheck uwzględnia do 10 minut na ten pierwszy rozruch.
 
 ## Codzienna praca
@@ -112,15 +113,18 @@ make test-e2e-mocked  # zachowane regresje UI z mockami
 Domyślnie buduje/startuje stack, czeka do 900 s na readiness i uruchamia `entry`
 przez istniejący UI, bez drugiego Angular dev servera. Podczas cudzych runów używaj
 `STACK_MODE=existing`, który nie zmienia usług. Wybierz jawnie
-`CONTAINER_ENGINE=docker|podman` (domyślnie Docker); `bin/compose` respektuje ten sam wybór.
+`CONTAINER_ENGINE=podman|docker` (domyślnie Podman); `bin/compose` respektuje ten sam wybór.
 
 ```sh
+make test-e2e STACK_MODE=existing E2E_REPO=/sciezka/event-map-e2e
+# Opcjonalny, jawny silnik zgodności:
 make test-e2e CONTAINER_ENGINE=docker STACK_MODE=existing E2E_REPO=/sciezka/event-map-e2e
-make test-e2e CONTAINER_ENGINE=podman STACK_MODE=existing E2E_REPO=/sciezka/event-map-e2e
 make test-runner
 ```
 
 Raport i ograniczona diagnostyka pozostają prywatnie w `reports/<run>/` na hoście.
+Wrapper domyślnie używa `podman-compose`, bez zależności od Docker Desktop.
+Inny provider można wskazać przez `PODMAN_COMPOSE_PROVIDER`.
 Brak silnika, readiness lub raportu daje `BLOCKED` z niezerowym statusem; brak Podmana
 to `NOT RUN` dla zgodności tego silnika. Testy kontraktu nie dowodzą zgodności runtime.
 `entry` rozpoznający bramkę beta nie potwierdza Discovery/loginu/AI. `SUITE=business`

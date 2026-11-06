@@ -157,6 +157,24 @@ class InvocationTests(unittest.TestCase):
         adapter.run(self.args)
         self.assertIn(['podman', 'info', '--format', '{{.Version.Version}}'], self.calls)
 
+    def test_provider_version_uses_same_wrapper_as_runtime_operations(self):
+        self.args.engine = 'podman'
+        for provider in (None, '/explicit/provider'):
+            self.calls.clear()
+            if provider is None:
+                os.environ.pop('PODMAN_COMPOSE_PROVIDER', None)
+            else:
+                os.environ['PODMAN_COMPOSE_PROVIDER'] = provider
+            adapter.run(self.args)
+            wrapper = str(self.root / 'bin/compose')
+            self.assertIn([wrapper, '-p', 'isolated', '-f', str(self.root / 'compose.yaml'), 'version', '--short'], self.calls)
+            self.assertFalse(any(c[:3] == ['podman', 'compose', 'version'] for c in self.calls))
+            report = max((self.root / 'reports').glob('*/orchestration.json'), key=lambda p: p.stat().st_mtime_ns)
+            self.assertEqual(json.loads(report.read_text())['composeProviderVersion'], '5.1.4')
+            self.assertTrue(any(c[0] == wrapper and 'ps' in c for c in self.calls))
+            if provider is not None:
+                self.assertEqual(os.environ['PODMAN_COMPOSE_PROVIDER'], provider)
+
     def test_shared_lock_mount_and_explicit_origin(self):
         self.args.base_url = 'http://localhost:4200'
         adapter.run(self.args)
@@ -315,6 +333,21 @@ class InvocationTests(unittest.TestCase):
 
 
 class WrapperTests(unittest.TestCase):
+    def test_compose_defaults_to_podman_and_its_own_provider(self):
+        script = Path(__file__).resolve().parents[1] / 'bin/compose'
+        with tempfile.TemporaryDirectory() as directory:
+            stub = Path(directory) / 'podman'
+            stub.write_text('#!/bin/sh\nprintf "%s\\n" "$PODMAN_COMPOSE_PROVIDER" "$@"\n')
+            stub.chmod(0o700)
+            env = dict(os.environ, PATH=directory + ':' + os.environ['PATH'])
+            env.pop('CONTAINER_ENGINE', None); env.pop('PODMAN_COMPOSE_PROVIDER', None)
+            result = subprocess.run([str(script), 'version'], env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout.splitlines(), ['podman-compose', 'compose', 'version'])
+            env['PODMAN_COMPOSE_PROVIDER'] = '/custom/provider'
+            result = subprocess.run([str(script), 'version'], env=env, capture_output=True, text=True)
+            self.assertEqual(result.stdout.splitlines()[0], '/custom/provider')
+
     def test_compose_selects_exact_engine_and_preserves_status(self):
         script = Path(__file__).resolve().parents[1] / 'bin/compose'
         with tempfile.TemporaryDirectory() as directory:

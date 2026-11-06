@@ -99,7 +99,7 @@ def run(args):
         if not shutil.which(args.engine):
             raise Blocked('ENGINE_NOT_INSTALLED_NOT_RUN')
         version = command([args.engine, 'version', '--format', '{{.Client.Version}}'])
-        provider = command([args.engine, 'compose', 'version'])
+        provider = command(compose + ['version', '--short'])
         available = command([args.engine, 'info', '--format', '{{.ServerVersion}}' if args.engine == 'docker' else '{{.Version.Version}}'])
         # Version output alone is safe and bounded; malformed provider output is omitted.
         for key, value in [('engineVersion', version.stdout), ('composeProviderVersion', provider.stdout), ('engineServerVersion', available.stdout)]:
