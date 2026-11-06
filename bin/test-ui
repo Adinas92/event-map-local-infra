@@ -1,0 +1,300 @@
+#!/usr/bin/env python3
+"""Run the existing E2E CLI against the local Compose stack; never reset data."""
+import argparse
+import json
+import os
+import platform
+from pathlib import Path
+import re
+import shutil
+import signal
+import stat
+import subprocess
+import sys
+import time
+import tempfile
+import uuid
+from datetime import datetime, timezone
+
+ROOT = Path(__file__).resolve().parents[1]
+SERVICES = ('postgres', 'qdrant', 'redis', 'mailhog', 'event-ai', 'next-to-you', 'next-to-you-ui')
+HEALTH = {'postgres', 'redis', 'event-ai', 'next-to-you', 'next-to-you-ui'}
+IMAGE = 'mcr.microsoft.com/playwright:v1.60.0-noble'
+
+
+class Blocked(Exception):
+    pass
+
+
+def command(args, timeout=30, cwd=None, capture=True):
+    # Never forward raw engine/build/test output: it may contain application data.
+    try:
+        return subprocess.run(args, cwd=cwd, text=True, stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, timeout=timeout, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        raise Blocked('TOOL_UNAVAILABLE_OR_TIMEOUT') from None
+
+
+def git(repo, *args):
+    result = command(['git', '-C', str(repo), *args])
+    if result.returncode:
+        raise Blocked('E2E_GIT_UNAVAILABLE')
+    return result.stdout.strip()
+
+
+def private_json(path, value):
+    path.write_text(json.dumps(value, indent=2) + '\n')
+    path.chmod(0o600)
+
+
+def assess(report, code, suite, expected, base_url):
+    """Require both the real CLI outcome and nonempty application evidence."""
+    expected = set(expected)
+    if report.get('status') == 'BLOCKED':
+        return 'BLOCKED', 2
+    if report.get('status') == 'FAIL':
+        return 'FAIL', 1
+    counts = report.get('counts', {})
+    execution = report.get('execution') or {}
+    if (not expected or code != 0 or report.get('status') != 'PASS'
+            or report.get('scope') != 'application-ui-smoke'
+            or report.get('profile') != 'local'
+            or report.get('target') != base_url.rstrip('/') + '/'
+            or report.get('suiteSelection') != suite
+            or set(report.get('requiredScenarioIds', [])) != expected
+            or set(execution.get('discovered', [])) != expected
+            or any(counts.get(key, 0) for key in ('failed', 'notRun', 'expectedFailures', 'flaky', 'skipped', 'retries'))
+            or counts.get('executed') != len(expected) or counts.get('passed') != len(expected)):
+        return 'BLOCKED', 2
+    return 'PASS', 0
+
+
+def run(args):
+    os.umask(0o077)
+    run_dir = ROOT / 'reports' / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8])
+    run_dir.mkdir(parents=True, mode=0o700)
+    (ROOT / 'reports').chmod(0o700)
+    report = {'schemaVersion': 1, 'scope': 'local-ui-orchestration', 'status': 'BLOCKED',
+              'engine': args.engine, 'stackMode': args.stack_mode, 'suite': args.suite, 'target': args.base_url,
+              'system': platform.platform(), 'image': IMAGE,
+              'services': dict.fromkeys(('ui', 'backend', 'ai'), 'unknown (no deployment attestation)'),
+              'exitCode': 2, 'reason': 'NOT_STARTED', 'events': []}
+    name = 'event-map-ui-' + uuid.uuid4().hex[:12]
+    launched = False
+    child = None
+    compose = [str(ROOT / 'bin/compose'), '-p', args.project, '-f', str(ROOT / 'compose.yaml')]
+    os.environ['CONTAINER_ENGINE'] = args.engine
+
+    def event(stage, result):
+        # A bounded diagnostic log, without raw application logs or command arguments.
+        report['events'] = (report['events'] + [{'stage': stage, 'result': result}])[-30:]
+        (run_dir / 'runner.log').write_text('\n'.join(f"{e['stage']}: {e['result']}" for e in report['events']) + '\n')
+        (run_dir / 'runner.log').chmod(0o600)
+
+    def interrupted(signum, _frame):
+        raise InterruptedError(signum)
+
+    old_handlers = {s: signal.signal(s, interrupted) for s in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        if not shutil.which(args.engine):
+            raise Blocked('ENGINE_NOT_INSTALLED_NOT_RUN')
+        version = command([args.engine, 'version', '--format', '{{.Client.Version}}'])
+        provider = command(compose + ['version', '--short'])
+        available = command([args.engine, 'info', '--format', '{{.ServerVersion}}' if args.engine == 'docker' else '{{.Version.Version}}'])
+        # Version output alone is safe and bounded; malformed provider output is omitted.
+        for key, value in [('engineVersion', version.stdout), ('composeProviderVersion', provider.stdout), ('engineServerVersion', available.stdout)]:
+            report[key] = value.strip()[:180] if re.fullmatch(r'[\w .,+()/:-]+\s*', value) else 'unknown'
+        if any(r.returncode for r in (version, provider, available)):
+            raise Blocked('ENGINE_OR_COMPOSE_UNAVAILABLE_NOT_RUN')
+        event('engine', 'ready')
+        source = Path(args.e2e_repo).resolve()
+        if git(source, 'status', '--porcelain'):
+            raise Blocked('E2E_CHECKOUT_DIRTY')
+        report['suiteSHA'] = git(source, 'rev-parse', 'HEAD')
+        pkg = json.loads((source / 'package.json').read_text())
+        if pkg['devDependencies']['@playwright/test'] != '1.60.0':
+            raise Blocked('E2E_IMAGE_VERSION_MISMATCH')
+        # Clean git clone gives the suite a portable .git, without host worktree metadata.
+        workspace = run_dir / 'workspace'
+        result = command(['git', 'clone', '--quiet', '--no-hardlinks', str(source), str(workspace)], timeout=60)
+        if result.returncode or git(workspace, 'rev-parse', 'HEAD') != report['suiteSHA']:
+            raise Blocked('SNAPSHOT_FAILED')
+        manifest = json.loads((workspace / 'config/scenarios.json').read_text())
+        expected = {s['id'] for s in manifest['scenarios'] if s.get('required') and 'local' in s['profiles'] and args.suite in s.get('suites', [])}
+        if not expected:
+            raise Blocked('SUITE_NOT_SUPPORTED_OR_EMPTY')
+        suite_config = workspace / 'config/suites.json'
+        # Include the E2E CLI's 30-second process margin plus installation/proxy time.
+        timeout_ms = 120_000
+        if suite_config.exists():
+            timeout_ms = json.loads(suite_config.read_text())[args.suite]['timeoutMs']
+            if not isinstance(timeout_ms, int) or not 1 <= timeout_ms <= 3_600_000:
+                raise Blocked('SUITE_TIMEOUT_INVALID')
+        test_timeout = args.test_timeout or ((timeout_ms + 999) // 1000 + 630)
+        report['testTimeoutSeconds'] = test_timeout
+        fixture = None
+        attestation_dir = None
+        if args.suite != 'entry':
+            if not args.fixture:
+                raise Blocked('FIXTURE_FILE_REQUIRED')
+            fixture = Path(args.fixture).absolute()
+            # Read only metadata, never credentials; schema and origin belong to E2E.
+            if (fixture.is_symlink() or not fixture.is_file()
+                    or stat.S_IMODE(fixture.stat().st_mode) != 0o600):
+                raise Blocked('FIXTURE_FILE_INVALID')
+            contract = workspace / 'config/dependencies.json'
+            declared = json.loads(contract.read_text()) if contract.is_file() else None
+            if (not isinstance(declared, dict) or declared.get('activeAttestationContract')
+                    != 'fixture-index-slot-v1'):
+                raise Blocked('INDEX_ATTESTATION_CONTRACT_UNSUPPORTED')
+            # Mount the active directory, so atomic replacement/unlink remains visible.
+            # The E2E consumer validates slot fields; the host never reads fixture secrets.
+            index_state = fixture.parent / 'index-state'
+            attestation_dir = index_state / 'datasets'
+            for directory in (index_state, attestation_dir):
+                if (directory.is_symlink() or not directory.is_dir()
+                        or stat.S_IMODE(directory.stat().st_mode) != 0o700
+                        or directory.stat().st_uid != os.getuid()):
+                    raise Blocked('INDEX_ATTESTATION_DIRECTORY_INVALID')
+        locks = Path(args.lock_dir).absolute()
+        if locks.is_symlink():
+            raise Blocked('LOCK_DIRECTORY_INVALID')
+        locks.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if stat.S_IMODE(locks.stat().st_mode) != 0o700 or locks.stat().st_uid != os.getuid():
+            raise Blocked('LOCK_DIRECTORY_INVALID')
+        # Podman relabels only the private snapshot/lock directory, never the source repo.
+        for path in (workspace, fixture, attestation_dir, locks, ROOT):
+            if path and (',' in str(path) or '\n' in str(path)):
+                raise Blocked('UNSUPPORTED_MOUNT_PATH')
+        if args.stack_mode == 'start':
+            # Operator owns the stack; existing mode is required during concurrent shared runs.
+            started = command(compose + ['up', '-d', '--build', *SERVICES], timeout=args.start_timeout, capture=False)
+            event('stack-start', 'ok' if started.returncode == 0 else 'failed')
+            if started.returncode:
+                raise Blocked('STACK_START_FAILED')
+        deadline = time.monotonic() + args.readiness_timeout
+        while True:
+            ready = True
+            for service in SERVICES:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise Blocked('STACK_READINESS_TIMEOUT')
+                ids = command(compose + ['ps', '-q', service], timeout=min(10, remaining))
+                container_id = ids.stdout.strip()
+                if ids.returncode or not re.fullmatch(r'[a-f0-9]{12,64}', container_id):
+                    ready = False
+                    continue
+                # Read only state, never Config.Env, mounts, or secrets.
+                template = '{{.State.Status}}'
+                if service in HEALTH:
+                    template += ' {{.State.Health.Status}}'
+                status = command([args.engine, 'inspect', '--format', template, container_id],
+                                 timeout=min(10, max(0.1, deadline - time.monotonic())))
+                parts = status.stdout.strip().split()
+                if status.returncode or not parts or parts[0] != 'running' or (service in HEALTH and parts[1:] != ['healthy']):
+                    ready = False
+            if ready:
+                break
+            if time.monotonic() >= deadline:
+                raise Blocked('STACK_READINESS_TIMEOUT')
+            time.sleep(min(2, max(0, deadline - time.monotonic())))
+        event('readiness', 'ready')
+        output = run_dir / 'container'
+        output.mkdir(mode=0o700)
+        invocation = [args.engine, 'run', '--rm', '--name', name,
+                      '--init', '--network', args.project + '_event-map', '--shm-size', '1g',
+                      '--user', f'{os.getuid()}:{os.getgid()}', '--workdir', '/workspace',
+                      '--env', 'HOME=/tmp', '--env', 'E2E_LOCK_DIR=/run/e2e-locks', '--env', 'PLAYWRIGHT_BROWSERS_PATH=/ms-playwright',
+                      '--mount', f'type=bind,src={workspace},dst=/workspace',
+                      '--mount', f'type=bind,src={locks},dst=/run/e2e-locks',
+                      '--mount', f'type=bind,src={output},dst=/run/runner-output',
+                      '--mount', f'type=bind,src={ROOT / "bin/run-ui-container"},dst=/opt/event-map/run-ui-container,readonly',
+                      '--mount', f'type=bind,src={ROOT / "bin/ui-proxy.mjs"},dst=/opt/event-map/ui-proxy.mjs,readonly']
+        if args.engine == 'podman':
+            invocation += ['--userns=keep-id']
+        if fixture:
+            invocation += ['--mount', f'type=bind,src={fixture},dst=/run/e2e-fixture.json,readonly',
+                           '--mount', f'type=bind,src={attestation_dir},dst=/run/index-state/datasets,readonly']
+        invocation += [IMAGE, '/opt/event-map/run-ui-container', args.base_url, args.suite]
+        if fixture:
+            invocation += ['--fixture', '/run/e2e-fixture.json']
+        launched = True
+        child = subprocess.Popen(invocation, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            code = child.wait(timeout=test_timeout)
+        except subprocess.TimeoutExpired:
+            raise Blocked('RUNNER_TIMEOUT') from None
+        stage_file = output / 'stage.json'
+        if stage_file.exists():
+            stage = json.loads(stage_file.read_text())
+            if stage.get('stage') in {'NODE', 'INSTALL', 'PROXY', 'SUITE'}:
+                report['containerStage'] = stage['stage']
+        event('runner', 'completed' if code == 0 else 'nonzero')
+        files = list((workspace / 'reports').glob('*/report.json'))
+        if len(files) != 1:
+            raise Blocked('RUNNER_REPORT_UNAVAILABLE')
+        suite_report = json.loads(files[0].read_text())
+        if (suite_report.get('suite', {}).get('sha') != report['suiteSHA']
+                or suite_report.get('suite', {}).get('dirty') is not False):
+            raise Blocked('SUITE_VERSION_MISMATCH')
+        report['status'], report['exitCode'] = assess(suite_report, code, args.suite, expected, args.base_url)
+        report['suiteReport'] = str(files[0].relative_to(run_dir))
+        report['reason'] = 'SUITE_' + report['status']
+    except InterruptedError as error:
+        report.update(status='BLOCKED', exitCode=128 + error.args[0], reason='INTERRUPTED')
+    except Blocked as error:
+        report['reason'] = str(error)
+    except (OSError, ValueError, KeyError, TypeError):
+        report['reason'] = 'INVALID_CONFIGURATION_OR_REPORT'
+    finally:
+        # Ignore repeated signals only while removing this invocation's own container.
+        for s in old_handlers:
+            signal.signal(s, signal.SIG_IGN)
+        if launched:
+            try:
+                removed = command([args.engine, 'rm', '-f', name])
+                event('runner-cleanup', 'removed' if removed.returncode == 0 else 'already-removed-or-unavailable')
+            except Blocked:
+                event('runner-cleanup', 'unavailable')
+            if child and child.poll() is None:
+                child.terminate()
+                try:
+                    child.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+        event('outcome', report['reason'])
+        private_json(run_dir / 'orchestration.json', report)
+        for s, handler in old_handlers.items():
+            signal.signal(s, handler)
+        print(f"{report['status']}: {report['reason']}; report: {run_dir / 'orchestration.json'}")
+    return report['exitCode']
+
+
+def positive(value):
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError('must be positive')
+    return number
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--engine', choices=('docker', 'podman'), required=True)
+    parser.add_argument('--e2e-repo', required=True)
+    parser.add_argument('--suite', choices=('entry', 'business', 'discovery'), default='entry')
+    parser.add_argument('--stack-mode', choices=('start', 'existing'), default='start')
+    parser.add_argument('--project', default='event-map-local')
+    parser.add_argument('--fixture')
+    parser.add_argument('--base-url', choices=('http://localhost:4200', 'http://127.0.0.1:4200'), default='http://127.0.0.1:4200')
+    parser.add_argument('--lock-dir', default=os.environ.get('E2E_LOCK_DIR') or str(Path(tempfile.gettempdir()) / 'event-map-e2e-locks'))
+    parser.add_argument('--readiness-timeout', type=positive, default=900)
+    parser.add_argument('--start-timeout', type=positive, default=1800)
+    parser.add_argument('--test-timeout', type=positive, default=None)
+    args = parser.parse_args()
+    if not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,62}', args.project):
+        parser.error('invalid local Compose project name')
+    return run(args)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

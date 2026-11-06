@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+base_url=$1
+shift
+stage() { node -e 'require("fs").writeFileSync("/run/runner-output/stage.json", JSON.stringify({stage:process.argv[1]}), {mode:0o600})' "$1"; }
+stage NODE
+node -e 'if (Number(process.versions.node.split(".")[0]) !== 24) process.exit(2)'
+stage INSTALL
+# Dependencies and all output stay inside this run's private snapshot.
+npm ci --ignore-scripts --no-audit --no-fund --cache /tmp/npm-cache >/dev/null 2>&1
+stage PROXY
+node /opt/event-map/ui-proxy.mjs >/dev/null 2>&1 &
+proxy_pid=$!
+trap 'kill "$proxy_pid" 2>/dev/null || true' EXIT
+# Wait for the loopback listener; full stack readiness is owned by the host adapter.
+node --input-type=module -e '
+for (let attempt=0; attempt<50; attempt++) {
+ try { const r=await fetch("http://127.0.0.1:4200", {signal:AbortSignal.timeout(1000)}); if(r.ok) process.exit(0); } catch {}
+ await new Promise(resolve=>setTimeout(resolve,200));
+}
+process.exit(2);'
+stage SUITE
+set +e
+npm run test:e2e -- --profile local --base-url "$base_url" --suite "$@"
+code=$?
+set -e
+exit "$code"

@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+"""Explicit local projection setup/cleanup; never a product acceptance test."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+from fixture_index import main
+sys.exit(main())
