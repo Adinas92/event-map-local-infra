@@ -15,8 +15,8 @@ To repo odpowiada za lokalne uruchomienie usług. [Wiki Event Map](https://githu
 
 ## Wymagania
 
-- Podman z uruchomioną maszyną rootless i providerem `podman-compose`; silnik musi działać.
-  Docker jest opcjonalnym, jawnym trybem zgodności.
+- Docker Engine/Desktop z działającym `docker compose`.
+  Podman pozostaje opcjonalnym silnikiem wymagającym osobnej walidacji runtime.
 - Python 3.10+ i Git do nowego adaptera E2E.
 - `make` oraz powłoka zgodna ze skryptami `bin/`.
 - Sąsiednie checkouty trzech repozytoriów kodu (lub ich ścieżki w `.env`).
@@ -113,18 +113,18 @@ make test-e2e-mocked  # zachowane regresje UI z mockami
 Domyślnie buduje/startuje stack, czeka do 900 s na readiness i uruchamia `entry`
 przez istniejący UI, bez drugiego Angular dev servera. Podczas cudzych runów używaj
 `STACK_MODE=existing`, który nie zmienia usług. Wybierz jawnie
-`CONTAINER_ENGINE=podman|docker` (domyślnie Podman); `bin/compose` respektuje ten sam wybór.
+`CONTAINER_ENGINE=docker|podman` (domyślnie Docker); `bin/compose` respektuje ten sam wybór.
 
 ```sh
 make test-e2e STACK_MODE=existing E2E_REPO=/sciezka/event-map-e2e
-# Opcjonalny, jawny silnik zgodności:
-make test-e2e CONTAINER_ENGINE=docker STACK_MODE=existing E2E_REPO=/sciezka/event-map-e2e
+# Opcjonalny silnik wymagający osobnej walidacji:
+make test-e2e CONTAINER_ENGINE=podman STACK_MODE=existing E2E_REPO=/sciezka/event-map-e2e
 make test-runner
 ```
 
 Raport i ograniczona diagnostyka pozostają prywatnie w `reports/<run>/` na hoście.
-Wrapper domyślnie używa `podman-compose`, bez zależności od Docker Desktop.
-Inny provider można wskazać przez `PODMAN_COMPOSE_PROVIDER`.
+Dla jawnie wybranego Podmana wrapper używa `podman-compose`.
+Inny provider Podmana można wskazać przez `PODMAN_COMPOSE_PROVIDER`.
 Brak silnika, readiness lub raportu daje `BLOCKED` z niezerowym statusem; brak Podmana
 to `NOT RUN` dla zgodności tego silnika. Testy kontraktu nie dowodzą zgodności runtime.
 `entry` rozpoznający bramkę beta nie potwierdza Discovery/loginu/AI. `SUITE=business`

@@ -3,7 +3,7 @@ set -euo pipefail
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 default_config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}"
 export EVENT_MAP_SECRETS_DIR="${EVENT_MAP_SECRETS_DIR:-${default_config_dir}/event-map/secrets}"
-engine="${CONTAINER_ENGINE:-podman}"
+engine="${CONTAINER_ENGINE:-docker}"
 case "$engine" in docker|podman) ;; *) echo 'BLOCKED: CONTAINER_ENGINE must be docker or podman.' >&2; exit 2 ;; esac
 if [[ "$engine" == podman ]]; then
   export PODMAN_COMPOSE_PROVIDER="${PODMAN_COMPOSE_PROVIDER:-podman-compose}"

@@ -43,12 +43,12 @@ przepisuje i nie obsługuje dev.
 Po przygotowaniu eksportu i uzgodnieniu okna operator uruchamia:
 
 ```sh
-./bin/index-fixture index --engine podman \
+./bin/index-fixture index --engine docker \
   --input /prywatna/sciezka/index-input.json \
   --base-url http://localhost:4200 --owner local-fixture-operator
 ```
 
-Docelowy silnik to Podman; jawny Docker pozostaje trybem zgodności. Dostępne są `podman|docker`, `--project` (domyślnie `event-map-local`),
+Bieżący silnik to Docker. Opcjonalny Podman wymaga osobnej walidacji; migracja jest odłożona. Dostępne są `docker|podman`, `--project` (domyślnie `event-map-local`),
 `--state-dir`, `--lock-dir` i `--worker-timeout` (1–900 s, domyślnie 180 s).
 Silnik i zdrowy kontener `event-ai` muszą już działać; polecenie ich nie uruchamia.
 Zgodność Podmana wymaga osobnego rzeczywistego dowodu.
@@ -133,7 +133,7 @@ a nowe potwierdzenie nie jest wystawiane. Zachowaj oryginalny eksport oraz ten s
 Cleanup jest osobnym jawnym poleceniem operatora po zakończeniu zależnych runów:
 
 ```sh
-./bin/index-fixture cleanup --engine podman \
+./bin/index-fixture cleanup --engine docker \
   --input /prywatna/sciezka/index-input.json \
   --base-url http://localhost:4200 --owner local-fixture-operator
 ```

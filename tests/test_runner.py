@@ -333,14 +333,19 @@ class InvocationTests(unittest.TestCase):
 
 
 class WrapperTests(unittest.TestCase):
-    def test_compose_defaults_to_podman_and_its_own_provider(self):
+    def test_compose_defaults_to_docker_and_selects_podman_provider(self):
         script = Path(__file__).resolve().parents[1] / 'bin/compose'
         with tempfile.TemporaryDirectory() as directory:
-            stub = Path(directory) / 'podman'
+            stub = Path(directory) / 'docker'
             stub.write_text('#!/bin/sh\nprintf "%s\\n" "$PODMAN_COMPOSE_PROVIDER" "$@"\n')
             stub.chmod(0o700)
             env = dict(os.environ, PATH=directory + ':' + os.environ['PATH'])
             env.pop('CONTAINER_ENGINE', None); env.pop('PODMAN_COMPOSE_PROVIDER', None)
+            result = subprocess.run([str(script), 'version'], env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout.splitlines(), ['', 'compose', 'version'])
+            stub.rename(Path(directory) / 'podman')
+            env['CONTAINER_ENGINE'] = 'podman'
             result = subprocess.run([str(script), 'version'], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0)
             self.assertEqual(result.stdout.splitlines(), ['podman-compose', 'compose', 'version'])
