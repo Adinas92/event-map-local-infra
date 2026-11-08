@@ -69,6 +69,19 @@ def assess(report, code, suite, expected, base_url):
     return 'PASS', 0
 
 
+
+def runtime_version(engine, container_id):
+    """Read immutable image identity and an optional source label, never Config.Env."""
+    image = command([engine, 'inspect', '--format', '{{.Image}}', container_id]).stdout.strip()
+    if not re.fullmatch(r'sha256:[0-9a-f]{64}', image):
+        raise Blocked('RUNTIME_IMAGE_ID_UNAVAILABLE')
+    revision = command([engine, 'image', 'inspect', '--format',
+                        '{{index .Config.Labels "org.opencontainers.image.revision"}}', image])
+    source_sha = revision.stdout.strip()
+    return {'containerId': container_id, 'imageId': image,
+            'sourceSHA': source_sha if revision.returncode == 0 and re.fullmatch(r'[0-9a-f]{40}', source_sha) else None}
+
+
 def run(args):
     os.umask(0o077)
     run_dir = ROOT / 'reports' / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8])
@@ -199,6 +212,14 @@ def run(args):
                 raise Blocked('STACK_READINESS_TIMEOUT')
             time.sleep(min(2, max(0, deadline - time.monotonic())))
         event('readiness', 'ready')
+        report['runtimeServices'] = {}
+        for service in SERVICES:
+            container_id = command(compose + ['ps', '-q', service]).stdout.strip()
+            if not re.fullmatch(r'[a-f0-9]{12,64}', container_id):
+                raise Blocked('RUNTIME_CONTAINER_ID_UNAVAILABLE')
+            report['runtimeServices'][service] = runtime_version(args.engine, container_id)
+        for alias, service in [('ui', 'next-to-you-ui'), ('backend', 'next-to-you'), ('ai', 'event-ai')]:
+            report['services'][alias] = report['runtimeServices'][service]
         output = run_dir / 'container'
         output.mkdir(mode=0o700)
         invocation = [args.engine, 'run', '--rm', '--name', name,
