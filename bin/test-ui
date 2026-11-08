@@ -16,6 +16,9 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from stack_lock import stack_lock, inherited_fd
+
 ROOT = Path(__file__).resolve().parents[1]
 SERVICES = ('postgres', 'qdrant', 'redis', 'mailhog', 'event-ai', 'next-to-you', 'next-to-you-ui')
 HEALTH = {'postgres', 'redis', 'event-ai', 'next-to-you', 'next-to-you-ui'}
@@ -29,7 +32,8 @@ class Blocked(Exception):
 def command(args, timeout=30, cwd=None, capture=True):
     # Never forward raw engine/build/test output: it may contain application data.
     try:
-        return subprocess.run(args, cwd=cwd, text=True, stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
+        fd = inherited_fd()
+        return subprocess.run(args, cwd=cwd, text=True, pass_fds=(fd,) if fd is not None else (), stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
                               stderr=subprocess.DEVNULL, timeout=timeout, check=False)
     except (OSError, subprocess.TimeoutExpired):
         raise Blocked('TOOL_UNAVAILABLE_OR_TIMEOUT') from None
@@ -95,6 +99,7 @@ def run(args):
     name = 'event-map-ui-' + uuid.uuid4().hex[:12]
     launched = False
     child = None
+    lease = None
     compose = [str(ROOT / 'bin/compose'), '-p', args.project, '-f', str(ROOT / 'compose.yaml')]
     os.environ['CONTAINER_ENGINE'] = args.engine
 
@@ -179,6 +184,12 @@ def run(args):
         for path in (workspace, fixture, attestation_dir, locks, ROOT):
             if path and (',' in str(path) or '\n' in str(path)):
                 raise Blocked('UNSUPPORTED_MOUNT_PATH')
+        try:
+            lease = stack_lock()
+            lease.__enter__()
+        except (OSError, ValueError):
+            lease = None
+            raise Blocked('STACK_BUSY_OR_LOCK_INVALID') from None
         if args.stack_mode == 'start':
             # Operator owns the stack; existing mode is required during concurrent shared runs.
             started = command(compose + ['up', '-d', '--build', *SERVICES], timeout=args.start_timeout, capture=False)
@@ -258,6 +269,15 @@ def run(args):
         if (suite_report.get('suite', {}).get('sha') != report['suiteSHA']
                 or suite_report.get('suite', {}).get('dirty') is not False):
             raise Blocked('SUITE_VERSION_MISMATCH')
+        after = {}
+        for service in SERVICES:
+            container_id = command(compose + ['ps', '-q', service]).stdout.strip()
+            if not re.fullmatch(r'[a-f0-9]{12,64}', container_id):
+                raise Blocked('RUNTIME_CHANGED_DURING_RUN')
+            after[service] = runtime_version(args.engine, container_id)
+        report['runtimeServicesAfter'] = after
+        if after != report['runtimeServices']:
+            raise Blocked('RUNTIME_CHANGED_DURING_RUN')
         report['status'], report['exitCode'] = assess(suite_report, code, args.suite, expected, args.base_url)
         report['suiteReport'] = str(files[0].relative_to(run_dir))
         report['reason'] = 'SUITE_' + report['status']
@@ -283,6 +303,8 @@ def run(args):
                     child.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     child.kill()
+        if lease is not None:
+            lease.__exit__(None, None, None)
         event('outcome', report['reason'])
         private_json(run_dir / 'orchestration.json', report)
         for s, handler in old_handlers.items():

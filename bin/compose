@@ -10,4 +10,4 @@ if [[ "$engine" == podman ]]; then
 fi
 command -v "$engine" >/dev/null || { echo 'BLOCKED: selected container engine unavailable.' >&2; exit 2; }
 cd "${repo_dir}"
-exec "$engine" compose "$@"
+exec python3 "${repo_dir}/bin/stack_lock.py" "$engine" compose "$@"
