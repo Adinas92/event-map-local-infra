@@ -7,6 +7,7 @@ from pathlib import Path
 import signal
 import subprocess
 import tempfile
+import sys
 import contextlib
 import io
 import unittest
@@ -23,6 +24,24 @@ def successful_report():
             'target': 'http://127.0.0.1:4200/', 'suiteSelection': 'entry',
             'requiredScenarioIds': ['UI-ENTRY'], 'execution': {'discovered': ['UI-ENTRY']},
             'counts': {'executed': 1, 'passed': 1}}
+
+
+class StackLockTests(unittest.TestCase):
+    def test_second_process_is_blocked_but_verified_inheritance_can_reenter(self):
+        from stack_lock import stack_lock, KEY
+        helper = str(Path(__file__).resolve().parents[1] / 'bin/stack_lock.py')
+        with stack_lock() as fd:
+            # No inherited fd or key: this is an independent stack operation.
+            independent = subprocess.run([sys.executable, helper, sys.executable, '-c', 'pass'],
+                                         env={'PATH': '/usr/bin:/bin'}, capture_output=True)
+            self.assertEqual(independent.returncode, 2)
+            inherited = subprocess.run([sys.executable, helper, sys.executable, '-c', 'pass'],
+                                       env={'PATH': '/usr/bin:/bin', KEY: str(fd)},
+                                       pass_fds=(fd,), capture_output=True)
+            self.assertEqual(inherited.returncode, 0)
+        after = subprocess.run([sys.executable, helper, sys.executable, '-c', 'pass'],
+                               env={'PATH': '/usr/bin:/bin'}, capture_output=True)
+        self.assertEqual(after.returncode, 0)
 
 
 class OutcomeTests(unittest.TestCase):
@@ -63,6 +82,8 @@ class InvocationTests(unittest.TestCase):
         self.no_report = False
         self.interrupt = False
         self.not_ready = False
+        self.runtime_drift = False
+        self.runner_completed = False
         self.args = type('Args', (), dict(engine='docker', project='isolated', suite='entry',
               e2e_repo=str(self.source), stack_mode='existing', fixture=None, base_url='http://127.0.0.1:4200', lock_dir=str(self.root / 'locks'),
               readiness_timeout=1, test_timeout=1, start_timeout=1))()
@@ -90,8 +111,12 @@ class InvocationTests(unittest.TestCase):
             (dest / 'config/scenarios.json').write_text(json.dumps({'scenarios': [
                 {'id': 'UI-ENTRY', 'required': True, 'profiles': ['local'], 'suites': [self.args.suite]}]}))
         if 'ps' in args:
-            output = 'a' * 64
-        if 'inspect' in args:
+            output = ('d' if self.runtime_drift and self.runner_completed else 'a') * 64
+        if args[:3] == [self.args.engine, 'image', 'inspect']:
+            output = 'b' * 40
+        elif 'inspect' in args and args[3] == '{{.Image}}':
+            output = 'sha256:' + 'c' * 64
+        elif 'inspect' in args:
             # Health-less services must not access an optional missing map key.
             self.assertNotIn('if .State.Health', args[3])
             self.assertIn(args[3], ['{{.State.Status}}', '{{.State.Status}} {{.State.Health.Status}}'])
@@ -114,6 +139,7 @@ class InvocationTests(unittest.TestCase):
                     if outer.test_code:
                         report['status'] = 'FAIL'
                     (report_dir / 'report.json').write_text(json.dumps(report))
+                outer.runner_completed = True
                 return outer.test_code
             def poll(self): return 0
         return Child()
@@ -125,15 +151,42 @@ class InvocationTests(unittest.TestCase):
         self.assertEqual(files[0].parent.stat().st_mode & 0o777, 0o700)
         return json.loads(files[0].read_text())
 
+    def test_runtime_recreation_during_suite_cannot_claim_pass(self):
+        self.runtime_drift = True
+        self.assertEqual(adapter.run(self.args), 2)
+        self.assertEqual(self.result()['status'], 'BLOCKED')
+        self.assertEqual(self.result()['reason'], 'RUNTIME_CHANGED_DURING_RUN')
+
+    def test_stack_busy_cannot_start_runner(self):
+        with patch.object(adapter, 'stack_lock', side_effect=BlockingIOError):
+            self.assertEqual(adapter.run(self.args), 2)
+        self.assertFalse(any(call[:2] == ['docker', 'run'] for call in self.calls))
+
     def test_existing_pass_and_scoped_cleanup(self):
         self.assertEqual(adapter.run(self.args), 0)
         self.assertEqual(self.result()['status'], 'PASS')
+        self.assertEqual(self.result()['services']['ui']['imageId'], 'sha256:' + 'c' * 64)
+        self.assertEqual(self.result()['services']['backend']['sourceSHA'], 'b' * 40)
         self.assertFalse(any('up' in call or 'down' in call or '--volumes' in call or 'secrets' in call for call in self.calls))
         invocation = next(c for c in self.calls if c[:2] == ['docker', 'run'])
         self.assertIn('isolated_event-map', invocation)
         self.assertIn('--user', invocation)
         self.assertFalse(any('/run/secrets' in arg for arg in invocation))
         self.assertIn('rm', self.calls[-1])
+
+
+    def test_runtime_without_source_label_reports_null_not_checkout_sha(self):
+        self.assertEqual(adapter.run(self.args), 0)
+        calls = lambda args, **kwargs: subprocess.CompletedProcess(args, 0, 'sha256:'+'a'*64 if args[1] == 'inspect' else '<no value>')
+        with patch.object(adapter, 'command', side_effect=calls):
+            version = adapter.runtime_version('docker', 'd'*64)
+        self.assertIsNone(version['sourceSHA'])
+        self.assertEqual(version['imageId'], 'sha256:'+'a'*64)
+
+    def test_missing_runtime_image_id_blocks(self):
+        with patch.object(adapter, 'command', return_value=subprocess.CompletedProcess([], 0, 'unknown')):
+            with self.assertRaisesRegex(adapter.Blocked, 'RUNTIME_IMAGE_ID_UNAVAILABLE'):
+                adapter.runtime_version('docker', 'd'*64)
 
     def test_podman_keep_id(self):
         self.args.engine = 'podman'
