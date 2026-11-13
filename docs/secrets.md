@@ -60,6 +60,21 @@ dla backendu i również nigdy go nie wypisuje.
 Na nowym komputerze `make setup` pokazuje komplet brakujących nazw bez tworzenia
 pustych plików i bez wyświetlania jakiejkolwiek wartości.
 
+## Pliki OCI
+
+Dla opcjonalnej integracji OCI backend odczytuje profil `LOCAL` i klucz API
+z tego samego katalogu tylko do odczytu. W profilu ustaw
+`key_file=/run/secrets/oci_api_key.pem`. Zaimportuj dwa dedykowane pliki:
+
+```bash
+./bin/secrets set-file next-to-you oci_config /sciezka/do/profilu-local
+./bin/secrets set-file next-to-you oci_api_key.pem /sciezka/do/klucza-local.pem
+```
+
+Import zachowuje wszystkie wiersze i zapisuje plik z uprawnieniami `0600`.
+Opis prywatnego bucketu i sprawdzenia integracji znajduje się w
+[runbooku OCI](https://github.com/Adinas92/event-map-docs/blob/main/docs/runbook/oci-zdjecia-wydarzen.md).
+
 ## Granica bezpieczeństwa
 
 To rozwiązanie ogranicza przypadkowe ujawnienie w Git, konfiguracji Compose,
