@@ -168,3 +168,10 @@ make reset CONFIRM=yes
 ## Wyłączność stacku podczas testu
 
 `bin/test-ui` i wszystkie operacje `bin/compose` współdzielą lokalną blokadę procesu użytkownika między checkoutami. Blokada obejmuje cały test i cleanup; zajęty stack daje BLOCKED bez czekania i bez uruchomienia równoległej operacji. Zagnieżdżone odczyty Compose dziedziczą zweryfikowany deskryptor blokady. Bezpośrednie polecenia silnika zmieniające współdzielony stack poza tym kontraktem są niedopuszczalne podczas runu. Runner porównuje containerId/imageId/sourceSHA przed i po suicie; wykryta zmiana daje `RUNTIME_CHANGED_DURING_RUN`, nigdy PASS dla starej wersji. To blokada lokalna; nie deklaruje koordynacji operacji z innego hosta.
+
+## Opcjonalna konfiguracja z OCI Vault
+
+Przypięte wersje konfiguracji LOCAL i DEV można pobierać przez `bin/secrets oci`.
+[Instrukcja](docs/oci-configuration.md) opisuje katalog nazw, prywatne generacje,
+tryb Compose bez nadpisujących env oraz rotację i rollback. Dostarczenie narzędzia
+nie potwierdza migracji środowisk ani usunięcia kopii CI.
