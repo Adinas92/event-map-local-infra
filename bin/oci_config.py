@@ -111,8 +111,12 @@ def fetch_bundle(doc, bundle, profile, auth, runner=subprocess.run):
                "--output", "json", "--connection-timeout", "5", "--read-timeout", "10",
                "--max-retries", "0", "secrets", "secret-bundle", "get",
                "--secret-id", bundle["secret_id"], "--version-number", str(bundle["version_number"])]
+    # Preserve the host's network transport, including managed egress proxies.
+    # OCI endpoint/debug overrides and unrelated application values stay excluded.
     environment = {key: value for key, value in os.environ.items()
-                   if key in {"PATH", "HOME", "LANG", "LC_ALL", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"}}
+                   if key in {"PATH", "HOME", "LANG", "LC_ALL", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
+                              "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+                              "http_proxy", "https_proxy", "all_proxy", "no_proxy"}}
     environment["OCI_CLI_RC_FILE"] = os.devnull
     try:
         response = runner(command, capture_output=True, timeout=25, env=environment)

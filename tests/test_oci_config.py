@@ -99,6 +99,19 @@ class OciConfigTest(unittest.TestCase):
         self.assertEqual((self.root / "local/event-ai/current").resolve(), rollback)
         self.assertTrue(old.is_dir() and new.is_dir())
 
+    def test_managed_network_proxy_survives_without_oci_overrides(self):
+        transport = {"HTTPS_PROXY": "http://synthetic-proxy.invalid:8080",
+                     "https_proxy": "http://synthetic-proxy.invalid:8080",
+                     "NO_PROXY": "localhost"}
+        with patch.dict(os.environ, {**transport, "OCI_CLI_ENDPOINT": "https://untrusted.invalid",
+                                     "OCI_CLI_DEBUG": "true", "OPENAI_API_KEY": MARKER}):
+            self.sync()
+        child = self.calls[0][1]["env"]
+        for name, value in transport.items():
+            self.assertEqual(child[name], value)
+        for name in ["OCI_CLI_ENDPOINT", "OCI_CLI_DEBUG", "OPENAI_API_KEY"]:
+            self.assertNotIn(name, child)
+
     def test_bad_payloads_never_activate_over_existing_generation(self):
         old = self.sync()
         mutations = [lambda p: p.update(environment="dev"), lambda p: p.update(service="next-to-you"),
