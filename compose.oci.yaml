@@ -1,0 +1,38 @@
+# Requires Docker Compose >= 2.24.4 for !override. No values are stored here.
+# Supply immutable generation paths via bin/secrets oci compose, never current symlinks.
+services:
+  event-ai:
+    environment: !override
+      EVENT_MAP_SECRETS_DIR: /run/secrets
+      CRAWL4_AI_BASE_DIRECTORY: /tmp
+    volumes:
+      - type: bind
+        source: ${OCI_AI_RELEASE:?Use bin/secrets oci compose}/files
+        target: /run/secrets
+        read_only: true
+        bind:
+          create_host_path: false
+  next-to-you:
+    environment: !override
+      SPRING_CONFIG_IMPORT: configtree:/run/secrets/
+      NTY_IMAGE_STORAGE_OCI_CONFIG_FILE_PATH: /run/secrets/oci_config
+      NTY_IMAGE_STORAGE_OCI_CONFIG_PROFILE: LOCAL
+    volumes:
+      - type: bind
+        source: ${OCI_BE_RELEASE:?Use bin/secrets oci compose}/files
+        target: /run/secrets
+        read_only: true
+        bind:
+          create_host_path: false
+  next-to-you-ui:
+    environment: !override {}
+    # Nginx's old entrypoint writes runtime-config.js from environment. Replace
+    # that entrypoint so the public generated file remains the source of truth.
+    entrypoint: [nginx, -g, 'daemon off;']
+    volumes:
+      - type: bind
+        source: ${OCI_UI_RELEASE:?Use bin/secrets oci compose}/runtime-config.js
+        target: /usr/share/nginx/html/runtime-config.js
+        read_only: true
+        bind:
+          create_host_path: false

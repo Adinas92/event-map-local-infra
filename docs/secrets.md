@@ -87,3 +87,9 @@ Agentowi LLM należy udostępniać repozytoria i bezpieczne komendy (`make statu
 odczytujące środowisko procesu. Przy wymaganej twardej izolacji stack powinien być
 uruchamiany przez osobne konto systemowe lub zewnętrzny runner bez dostępu agenta
 do magazynu sekretów.
+
+## Pobieranie z OCI
+
+Istniejący helper udostępnia opt-in `bin/secrets oci sync|compose`.
+[Procedura OCI](oci-configuration.md) używa oddzielnych generacji i przypiętych
+wersji. Nie nadpisuje istniejącego katalogu sekretów lokalnego stacku.

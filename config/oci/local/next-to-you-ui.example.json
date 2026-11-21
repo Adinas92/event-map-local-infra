@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "environment": "local",
+  "service": "next-to-you-ui",
+  "region": "eu-amsterdam-1",
+  "bundles": [
+    {
+      "class": "public",
+      "secret_id": "ocid1.vaultsecret.oc1.eu-amsterdam-1.synthetic1",
+      "version_number": 1,
+      "names": [
+        "CARTO_BASEMAPS_API_KEY"
+      ],
+      "required": [
+        "CARTO_BASEMAPS_API_KEY"
+      ]
+    }
+  ],
+  "catalog_sha256": "REPLACE_WITH_SHA256_OF_CATALOG"
+}
