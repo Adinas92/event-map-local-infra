@@ -50,7 +50,9 @@ Profil CLI wybiera się jawnie; nazwa profilu nie dowodzi uprawnień IAM.
 Powtórz osobno dla `next-to-you` i `next-to-you-ui` z ich descriptorami i
 odpowiednimi profilami. Do stałego deployu użyj zatwierdzonej tożsamości:
 `api_key` lub `instance_principal` tylko tam, gdzie rzeczywiście działa.
-Fetcher nie przekazuje poświadczeń OCI do kontenerów aplikacji.
+Fetcher nie przekazuje swoich poświadczeń dostępu do Vault do kontenerów.
+Osobny profil i klucz backendu do Object Storage (`oci_config`,
+`oci_api_key.pem`) pozostają jawnymi pozycjami katalogu konfiguracji backendu.
 
 Sukces zwraca tylko `READY`, środowisko, serwis i bezwzględną ścieżkę generacji.
 Katalogi mają `0700`, pliki konfiguracji `0600`; wyłącznie publiczny JS UI ma
