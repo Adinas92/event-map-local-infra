@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "environment": "dev",
+  "service": "next-to-you",
+  "region": "eu-amsterdam-1",
+  "bundles": [
+    {
+      "class": "secret",
+      "secret_id": "ocid1.vaultsecret.oc1.eu-amsterdam-1.synthetic1",
+      "version_number": 1,
+      "names": [
+        "APP_AUTH_TOKEN_SECRET",
+        "DB_URL",
+        "DB_PASSWORD"
+      ],
+      "required": [
+        "APP_AUTH_TOKEN_SECRET",
+        "DB_URL",
+        "DB_PASSWORD"
+      ]
+    },
+    {
+      "class": "parameter",
+      "secret_id": "ocid1.vaultsecret.oc1.eu-amsterdam-1.synthetic2",
+      "version_number": 1,
+      "names": [
+        "DB_USERNAME",
+        "MAIL_SENDER_HOST",
+        "MAIL_SENDER_PORT"
+      ],
+      "required": [
+        "DB_USERNAME",
+        "MAIL_SENDER_HOST",
+        "MAIL_SENDER_PORT"
+      ]
+    }
+  ],
+  "catalog_sha256": "REPLACE_WITH_SHA256_OF_CATALOG"
+}

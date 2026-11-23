@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "environment": "local",
+  "service": "event-ai",
+  "region": "eu-amsterdam-1",
+  "bundles": [
+    {
+      "class": "secret",
+      "secret_id": "ocid1.vaultsecret.oc1.eu-amsterdam-1.synthetic1",
+      "version_number": 1,
+      "names": [
+        "POSTGRES_URL",
+        "OPENAI_API_KEY",
+        "QDRANT_URL"
+      ],
+      "required": [
+        "POSTGRES_URL",
+        "OPENAI_API_KEY",
+        "QDRANT_URL"
+      ]
+    },
+    {
+      "class": "parameter",
+      "secret_id": "ocid1.vaultsecret.oc1.eu-amsterdam-1.synthetic2",
+      "version_number": 1,
+      "names": [
+        "NTY_MCP_BASE_URL",
+        "NTY_MCP_OAUTH_TOKEN_URL"
+      ],
+      "required": [
+        "NTY_MCP_BASE_URL",
+        "NTY_MCP_OAUTH_TOKEN_URL"
+      ]
+    }
+  ],
+  "catalog_sha256": "REPLACE_WITH_SHA256_OF_CATALOG"
+}
