@@ -62,7 +62,15 @@ def exact_fields(value, expected):
         reject("SCHEMA")
 
 
-def descriptor(path, environment, service):
+def load_catalog():
+    raw = CATALOG.read_bytes()
+    services = {}
+    for entry in decode_json(raw, 100_000)["entries"]:
+        services.setdefault(entry["service"], {})[entry["name"]] = entry
+    return hashlib.sha256(raw).hexdigest(), services
+
+
+def descriptor(path, environment, service, catalog=None):
     doc = load_json(path)
     exact_fields(doc, ["schema_version", "environment", "service", "region", "bundles", "catalog_sha256"])
     if (type(doc["schema_version"]) is not int or doc["schema_version"] != 1
@@ -71,11 +79,10 @@ def descriptor(path, environment, service):
             or not isinstance(doc["region"], str)
             or not re.fullmatch(r"[a-z]{2}-[a-z0-9-]+-[1-9][0-9]*", doc["region"])):
         reject("DESCRIPTOR_IDENTITY")
-    if doc["catalog_sha256"] != hashlib.sha256(CATALOG.read_bytes()).hexdigest():
+    revision, services = load_catalog() if catalog is None else catalog
+    if doc["catalog_sha256"] != revision:
         reject("CATALOG_VERSION")
-    catalog = load_json(CATALOG, 500_000)
-    allowed = {x["name"]: x["class"] for x in catalog["entries"]
-               if x["service"] == service and x["disposition"] == "migratable"}
+    allowed = services.get(service, {})
     if not isinstance(doc["bundles"], list) or not 1 <= len(doc["bundles"]) <= 2:
         reject("BUNDLE_COUNT")
     seen, classes, sources = set(), set(), set()
@@ -99,7 +106,7 @@ def descriptor(path, environment, service):
                 or len(set(required)) != len(required) or not set(required) <= set(names)):
             reject("NAME_SET")
         for name in names:
-            if allowed.get(name) != kind:
+            if name not in allowed or allowed[name]["class"] != kind:
                 reject("CATALOG_BOUNDARY")
         seen.update(names)
     return doc
@@ -188,7 +195,10 @@ def release_lock(directory):
 
 
 def sync(path, root, environment, service, profile, auth, runner=subprocess.run):
-    doc = descriptor(path, environment, service)
+    catalog = load_catalog()
+    doc = descriptor(path, environment, service, catalog)
+    _, services = catalog
+    entries = services[service]
     # No fallback to an old generation on fetch or validation failure.
     values = {}
     for bundle in doc["bundles"]:
@@ -211,10 +221,8 @@ def sync(path, root, environment, service, profile, auth, runner=subprocess.run)
         pointer = destination / (".current-" + uuid.uuid4().hex)
         try:
             files = private_directory(stage / "files")
-            targets = {x["name"]: x["target"] for x in load_json(CATALOG, 500_000)["entries"]
-                       if x["service"] == service and x["disposition"] == "migratable"}
             for name, value in values.items():
-                write_private(files / targets[name], value.encode("utf-8"))
+                write_private(files / entries[name].get("target", name), value.encode("utf-8"))
             if service == "next-to-you-ui":
                 public = {"cartoBasemapsApiKey": values.get("CARTO_BASEMAPS_API_KEY", "")}
                 write_private(stage / "runtime-config.js", ("window.eventMapConfig = " + json.dumps(public) + ";\n").encode())
@@ -238,6 +246,8 @@ def sync(path, root, environment, service, profile, auth, runner=subprocess.run)
 def compose(releases, environment, arguments, runner=subprocess.run):
     if len(releases) != 3:
         reject("THREE_RELEASES_REQUIRED")
+    catalog = load_catalog()
+    _, services = catalog
     directories = {}
     for path in releases:
         path = Path(path)
@@ -260,12 +270,12 @@ def compose(releases, environment, arguments, runner=subprocess.run):
         if record.get("descriptor_sha256") != digest:
             reject("RELEASE_DESCRIPTOR")
         # Reuse the same allowlist/schema validation without reading secret files.
-        if descriptor(path / "release-descriptor.json", environment, service) != doc:
+        if descriptor(path / "release-descriptor.json", environment, service, catalog) != doc:
             reject("RELEASE_DESCRIPTOR")
-        targets = {x["name"]: x["target"] for x in load_json(CATALOG, 500_000)["entries"] if x["service"] == service}
+        entries = services[service]
         for bundle in doc["bundles"]:
             for name in bundle["required"]:
-                value_file = path / "files" / targets[name]
+                value_file = path / "files" / entries[name].get("target", name)
                 if (value_file.is_symlink() or not value_file.is_file() or not value_file.stat().st_size
                         or value_file.stat().st_uid != os.getuid() or stat.S_IMODE(value_file.stat().st_mode) != 0o600):
                     reject("INCOMPLETE_RELEASE")

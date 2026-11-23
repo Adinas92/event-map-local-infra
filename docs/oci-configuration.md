@@ -8,10 +8,10 @@ Pełna procedura IAM, migracji i odbioru jest w
 ## Katalog i przypięcie
 
 [`config/oci-config-catalog.json`](../config/oci-config-catalog.json) zawiera
-nazwy, klasy, konsumentów, właścicieli, źródła i docelowe nazwy plików dla trzech
-aplikacji. `excluded` wyłącza niepotwierdzony alias IDE i kontrolowane ustawienia
-bootstrapu. `migratable` oznacza kandydata, nie potwierdzenie aktywnej konfiguracji.
-Każdy descriptor wybiera konkretny zestaw `names` i jego podzbiór `required`.
+dozwolone klucze migracji LOCAL i DEV z nazwą serwisu i klasą wartości.
+Nazwa pliku domyślnie odpowiada nazwie klucza. Pole `target` podaje wyjątki
+wymagane przez Spring configtree. Każdy descriptor wybiera zestaw `names`
+i jego podzbiór `required`.
 Włącz nazwy rzeczywiście potrzebne wybranym integracjom. Brakujące opcjonalne
 wartości nie tworzą pustych plików. Wartość pusta, nieznana nazwa lub zła klasa
 zatrzymuje import. Parametry wymagające pustej wartości reprezentuj pominięciem
@@ -22,7 +22,9 @@ Descriptor zawiera `schema_version: 1`, `environment: local|dev`, `service`,
 Każdy bundle ma `class`, `secret_id`, dodatni `version_number`, `names`, `required`.
 Przykłady w [`config/oci`](../config/oci) mają syntetyczne referencje i są
 szablonami, nie gotowym ustawieniem środowiska. Przypnij również commit narzędzia.
-Zmiana katalogu wymaga świadomego odświeżenia descriptorów.
+Po zmianie katalogu zaktualizuj sumę kontrolną w deskryptorach i ponownie
+wykonaj `sync` z tymi samymi wersjami OCI. Starsze generacje pozostają
+przypięte do poprzedniego katalogu i odpowiadającej mu wersji narzędzia.
 Zastąp `REPLACE_WITH_SHA256_OF_CATALOG` wynikiem
 `shasum -a 256 config/oci-config-catalog.json` oraz syntetyczne OCID prawdziwymi
 referencjami właściwych bundle. Szablon przed uzupełnieniem jest odrzucany.

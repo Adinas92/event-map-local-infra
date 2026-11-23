@@ -137,11 +137,11 @@ class OciConfigTest(unittest.TestCase):
 
     def test_catalog_uses_pydantic_aliases_and_pins_catalog_revision(self):
         bundle = self.doc["bundles"][0]
-        bundle.update({"class": "parameter", "names": ["AI_SEARCH_ENABLED"], "required": ["AI_SEARCH_ENABLED"]})
+        bundle.update({"class": "parameter", "names": ["LLM_PROVIDER"], "required": ["LLM_PROVIDER"]})
         self.save()
-        release = self.sync(self.change_payload(lambda p: p.update(values={"AI_SEARCH_ENABLED": "false"})))
-        self.assertEqual((release / "files/AI_SEARCH_ENABLED").read_text(), "false")
-        for wrong in ["ENABLED", "CANDIDATE_POOL_LIMIT", "PROVIDER"]:
+        release = self.sync(self.change_payload(lambda p: p.update(values={"LLM_PROVIDER": "ollama"})))
+        self.assertEqual((release / "files/LLM_PROVIDER").read_text(), "ollama")
+        for wrong in ["AI_SEARCH_ENABLED", "ENABLED", "PROVIDER"]:
             bundle.update(names=[wrong], required=[wrong])
             self.save()
             with self.assertRaisesRegex(oci.ConfigError, "CATALOG_BOUNDARY"):
@@ -150,6 +150,16 @@ class OciConfigTest(unittest.TestCase):
         self.save()
         with self.assertRaisesRegex(oci.ConfigError, "CATALOG_VERSION"):
             self.sync()
+
+    def test_catalog_keeps_explicit_configtree_filenames(self):
+        self.doc = self.make_doc("next-to-you")
+        names = ["SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH", "SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE"]
+        self.doc["bundles"][0].update({"class": "parameter", "names": names, "required": names})
+        self.save()
+        release = self.sync()
+        self.assertEqual(sorted(p.name for p in (release / "files").iterdir()),
+                         ["spring.mail.properties.mail.smtp.auth",
+                          "spring.mail.properties.mail.smtp.starttls.enable"])
 
     def test_completed_example_descriptors_match_catalog_classification(self):
         for example in sorted((REPO / "config/oci").glob("*/*.example.json")):
